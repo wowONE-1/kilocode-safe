@@ -112,13 +112,19 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
   // kilocode_change start - security reviews are one-shot prompts with explicit risk context
   if (request.permission === "security_package") {
     const command = text(input.command)
-    const packages = Array.isArray(input.packages) ? input.packages.filter((item): item is string => typeof item === "string") : []
+    const packages = Array.isArray(input.packages)
+      ? input.packages.filter((item): item is string => typeof item === "string")
+      : []
+    const reasons = Array.isArray(input.reasons)
+      ? input.reasons.filter((item): item is string => typeof item === "string")
+      : []
     return {
       icon: "!",
       title: "Review package installation",
       lines: [
         ...(command ? [`$ ${command}`] : []),
         ...(packages.length > 0 ? [`Packages: ${packages.join(", ")}`] : []),
+        ...reasons.map((item) => "Risk: " + item),
         "This approval applies to this command only.",
       ],
     }

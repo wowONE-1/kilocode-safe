@@ -23,6 +23,7 @@ import { CommandTimeout } from "@/kilocode/command-timeout" // kilocode_change
 import { heredocs } from "@/kilocode/tool/shell-heredoc" // kilocode_change
 import { unparsed } from "@/kilocode/tool/shell-unparsed" // kilocode_change
 import { SecurityTrace } from "@/kilocode/security/trace" // kilocode_change
+import { Slopsquatting } from "@/kilocode/security/slopsquatting" // kilocode_change
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
@@ -429,11 +430,18 @@ export const ShellPermission = Effect.gen(function* () {
         const tree = yield* Effect.acquireRelease(parse(input.command, ps), (tree) => Effect.sync(() => tree.delete()))
         const scan = yield* collect(tree.rootNode, input.cwd, ps, input.shell, instance)
         const metadata = heredocs(tree.rootNode, ShellID.toKind(Shell.name(input.shell))) // kilocode_change
-        // kilocode_change start - trace and review package installation before permission evaluation
-        const packages = yield* Effect.sync(() =>
+        // kilocode_change start - inspect package metadata before permission evaluation
+        yield* Effect.sync(() =>
           SecurityTrace.command({ command: input.command, cwd: input.cwd, patterns: Array.from(scan.patterns) }),
         )
-        if (packages.length > 0) {
+        const reviews = yield* Effect.promise(() => Slopsquatting.inspect(input.command))
+        const denied = reviews.filter((item) => item.verdict === "deny")
+        const asked = reviews.filter((item) => item.verdict === "ask")
+        const targets = denied.length > 0 ? denied : asked
+        if (targets.length > 0) {
+          const packages = targets.map((item) => item.name)
+          const reasons = targets.flatMap((item) => item.reasons.map((reason) => item.name + ": " + reason))
+          const deny = denied.length > 0
           yield* ctx.ask({
             permission: "security_package",
             patterns: [input.command],
@@ -442,7 +450,12 @@ export const ShellPermission = Effect.gen(function* () {
               command: normalizeUrls(input.command),
               cwd: input.cwd,
               packages,
-              description: `Package installation needs security review: ${packages.join(", ")}.`,
+              reasons,
+              checks: targets,
+              description: deny
+                ? "Package installation blocked: " + reasons.join(", ") + "."
+                : "Package installation needs security review: " + reasons.join(", ") + ".",
+              ...(deny ? { securityDeny: true, securityReason: reasons.join(", ") } : {}),
               securityReview: true,
             },
           })

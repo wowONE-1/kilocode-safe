@@ -228,6 +228,9 @@ const layer = Layer.effect(
             permission: request.permission,
             pattern: request.patterns.at(0) ?? "*",
             action: "deny",
+            ...(typeof request.metadata?.["securityReason"] === "string"
+              ? { reason: request.metadata["securityReason"] }
+              : {}),
           },
         })
       }

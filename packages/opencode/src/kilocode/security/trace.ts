@@ -1,8 +1,4 @@
-const installers = [
-  /(?:^|&&|\|\||;)\s*(?:npm|pnpm|yarn|bun)\s+(?:add|install|i)\s+([^;&|]+)/g,
-  /(?:^|&&|\|\||;)\s*(?:(?:python|python3)\s+-m\s+)?pip(?:3)?\s+install\s+([^;&|]+)/g,
-  /(?:^|&&|\|\||;)\s+uv\s+(?:add|pip\s+install)\s+([^;&|]+)/g,
-]
+import { Slopsquatting } from "./slopsquatting"
 
 const prompts = [
   ["ignore-previous-instructions", /\b(?:ignore|disregard)\b[\s\S]{0,120}\b(?:previous|prior)\b[\s\S]{0,120}\binstructions?\b/i],
@@ -19,19 +15,8 @@ function print(event: string, data: Record<string, unknown>) {
   console.log(`[kilo-security] ${event}`, data)
 }
 
-function words(value: string) {
-  return value
-    .trim()
-    .split(/\s+/)
-    .map((item) => item.replace(/[;,]$/, ""))
-    .filter((item) => item.length > 0 && !item.startsWith("-"))
-}
-
 function names(command: string) {
-  const items = installers.flatMap((pattern) =>
-    Array.from(command.matchAll(pattern)).flatMap((match) => words(match[1] ?? "")),
-  )
-  return Array.from(new Set(items))
+  return Slopsquatting.packages(command).map((item) => item.name)
 }
 
 export namespace SecurityTrace {

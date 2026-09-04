@@ -61,24 +61,24 @@ const review = (requests: Array<Omit<Permission.Request, "id" | "sessionID" | "t
 })
 
 describe("bash permission metadata.command", () => {
-  test("asks for security review before executing a package installation", async () => {
+  test("asks for security review before executing an unverified package source", async () => {
     await using tmp = await tmpdir()
     await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const bash = await runtime.runPromise(ShellTool.pipe(Effect.flatMap((info) => info.init())))
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const exit = await Effect.runPromiseExit(bash.execute({ command: "bun add reactt" }, review(requests)))
+        const exit = await Effect.runPromiseExit(bash.execute({ command: "bun add file:./reactt" }, review(requests)))
 
         expect(Exit.isFailure(exit)).toBe(true)
         expect(requests).toHaveLength(1)
         expect(requests[0]).toMatchObject({
           permission: "security_package",
-          patterns: ["bun add reactt"],
+          patterns: ["bun add file:./reactt"],
           always: [],
           metadata: {
-            command: "bun add reactt",
-            packages: ["reactt"],
+            command: "bun add file:./reactt",
+            packages: ["file:./reactt"],
             securityReview: true,
           },
         })

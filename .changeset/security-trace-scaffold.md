@@ -2,4 +2,4 @@
 "@kilocode/cli": patch
 ---
 
-Ask for an interactive security review before package installation and block suspicious file text before it reaches the agent.
+Verify npm and PyPI package metadata before installation, requiring review or blocking suspicious packages, and block suspicious file text before it reaches the agent.
