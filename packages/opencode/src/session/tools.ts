@@ -30,6 +30,10 @@ import { PermissionProvenance } from "@/kilocode/permission/provenance"
 import { McpApps } from "@/kilocode/mcp/apps"
 // kilocode_change end
 import { isRecord } from "@/util/record"
+import * as Judge from "@/kilocode/permission/judge/runtime" // kilocode_change
+import * as JudgeState from "@/kilocode/permission/judge/state" // kilocode_change
+import { Instance } from "@/kilocode/instance" // kilocode_change
+import { SessionID } from "./schema" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const MCP_RESOURCE_TOOLS = {
@@ -73,6 +77,45 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const permissionOrigins = cfg.permission_origins
   // kilocode_change end
   const flags = yield* RuntimeFlags.Service
+  // kilocode_change start - opt-in Qwen AUTO permission modes, inherited by child sessions
+  const judging = yield* Effect.promise(() =>
+    JudgeState.resolve(input.session.id, (id) =>
+      run.promise(sessions.get(SessionID.make(id))).then((session) => session.parentID),
+    ),
+  )
+  const finish = () =>
+    Judge.wrap(tools, {
+      mode: judging,
+      id: input.session.id,
+      directory: Instance.directory,
+      model: input.model,
+      messages: input.messages,
+      rules: KiloSessionPrompt.buildAskRuleset({
+        agent: input.agent,
+        session: input.session,
+        origins: permissionOrigins,
+      }).ruleset,
+      ask: (name, _args, options, reason) =>
+        run.promise(
+          KiloSessionPrompt.askPermission({
+            permission,
+            agents,
+            sessions,
+            origins: permissionOrigins,
+            agent: input.agent,
+            session: input.session,
+            request: {
+              sessionID: input.session.id,
+              permission: name,
+              patterns: [name],
+              always: [],
+              metadata: { securityReview: true, judgeFallback: true, reason },
+              tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            },
+          }).pipe(Effect.asVoid),
+        ),
+    })
+  // kilocode_change end
   const restricted = yield* SandboxPolicy.networkRestricted(input.session.id) // kilocode_change
   const sandboxed = (yield* SandboxPolicy.status(input.session.id)).enabled // kilocode_change
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => {
@@ -452,7 +495,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  if (flags.experimentalCodeMode) return tools
+  if (flags.experimentalCodeMode) return finish() // kilocode_change
 
   const mcpTools = restricted ? {} : yield* mcp.tools() // kilocode_change
   for (const [key, entry] of Object.entries(mcpTools)) {
@@ -570,7 +613,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     tools[key] = item
   }
 
-  return tools
+  return finish() // kilocode_change
 })
 
 function toRecord(value: unknown) {

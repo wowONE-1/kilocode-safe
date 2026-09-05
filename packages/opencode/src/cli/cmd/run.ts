@@ -252,6 +252,13 @@ export const RunCommand = effectCmd({
         describe: "run in direct interactive split-footer mode",
         default: false,
       })
+      // kilocode_change start
+      .option("mode", {
+        type: "string",
+        choices: ["mode_dos_llm_as_a_judge", "mode_prompt_guard_with_llm"] as const,
+        describe: "Qwen AUTO permission classifier mode",
+      })
+      // kilocode_change end
       .option("auto", {
         type: "boolean",
         describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
@@ -283,6 +290,7 @@ export const RunCommand = effectCmd({
     const { importCloudSession, validateCloudFork, reportCloudImportError } = yield* Effect.promise(
       () => import("@/kilocode/cloud-session"),
     )
+    const JudgeState = yield* Effect.promise(() => import("@/kilocode/permission/judge/state")) // kilocode_change
     const { KiloRunAuto } = yield* Effect.promise(() => import("@/kilocode/cli/run-auto"))
     const { KiloRunDrain } = yield* Effect.promise(() => import("@/kilocode/cli/run-drain"))
     const { KiloHeadless } = yield* Effect.promise(() => import("@/kilocode/permission/headless"))
@@ -292,6 +300,16 @@ export const RunCommand = effectCmd({
     const flags = yield* RuntimeFlags.Service
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
+      // kilocode_change start - remote servers need their own mode registration protocol
+      if (
+        args.mode &&
+        (args.attach || args.auto || args.yolo || args["dangerously-skip-permissions"] || args.mini || args.interactive)
+      ) {
+        throw new Error(
+          "--mode requires a local headless run and cannot be combined with --auto, --yolo, --attach, or interactive flags",
+        )
+      }
+      // kilocode_change end
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const interactive = args.mini || args.interactive // kilocode_change - retain `kilo run --interactive`
       const skipPermissions = args.yolo || args["dangerously-skip-permissions"] // kilocode_change - --auto is answered by the tracked-session block below
@@ -769,6 +787,7 @@ export const RunCommand = effectCmd({
         }
         const sessionID = sess.id
         // kilocode_change start - track Task children; plain headless runs deny subagent asks instead of hanging (#11903)
+        if (args.mode) JudgeState.register(sessionID, args.mode) // kilocode_change
         const tracked = KiloRunAuto.create(sessionID) // kilocode_change - named to avoid shadowing the `auto` flag
         const drain = KiloRunDrain.create(sessionID)
         if (!args.attach && !args.auto && !skipPermissions) KiloHeadless.mark(sessionID) // kilocode_change - --yolo skips too
@@ -1079,6 +1098,7 @@ export const RunCommand = effectCmd({
             if (!emit("error", { error: text })) UI.error(text)
             process.exitCode = 1
           } finally {
+            JudgeState.clear(sessionID) // kilocode_change
             drain.close()
             await completed
             await KiloRunDrain.flush()
@@ -1156,7 +1176,7 @@ export const RunCommand = effectCmd({
         return await execute(sdk)
       }
 
-      if (await KiloRunDaemon.attach({ directory, execute })) return // kilocode_change
+      if (!args.mode && (await KiloRunDaemon.attach({ directory, execute }))) return // kilocode_change - judge state belongs to the local runtime
 
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const { Server } = await import("@/server/server")
@@ -1223,6 +1243,7 @@ export async function runMini(input: MiniCommandInput) {
     replay: input.replay ?? true,
     "replay-limit": input.replayLimit,
     replayLimit: input.replayLimit,
+    mode: undefined, // kilocode_change
     auto: false,
     yolo: false,
     "dangerously-skip-permissions": false,

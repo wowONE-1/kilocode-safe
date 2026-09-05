@@ -18,6 +18,7 @@ import { KiloHeadless } from "@/kilocode/permission/headless"
 import { drainCovered } from "@/kilocode/permission/drain"
 import { ReadPermission } from "@/kilocode/permission/read"
 import { AgentManagerPermission } from "@/kilocode/permission/agent-manager" // kilocode_change
+import { approval as judgeApproval } from "@/kilocode/permission/judge/approval" // kilocode_change
 import { ExternalDirectoryPermission } from "@/kilocode/permission/external-directory"
 // kilocode_change end
 
@@ -256,6 +257,20 @@ const layer = Layer.effect(
         // kilocode_change start - override "allow" to "ask" for protected config paths
         if (rule.action === "allow" && (!isProtected || trusted)) {
           approvedRule = rule // remember the winning rule so callers can explain the auto-approval
+          continue
+        }
+        // kilocode_change end
+        // kilocode_change start - only an invocation that passed the judge can approve intrinsic asks
+        const judged = judgeApproval.getStore()
+        const source = (rule as Rule & { source?: string }).source
+        if (
+          judged?.session === request.sessionID &&
+          judged.call === request.tool?.callID &&
+          !isProtected &&
+          rule.action === "ask" &&
+          (source == null || source === "agent")
+        ) {
+          approvedRule = { ...rule, action: "allow" }
           continue
         }
         // kilocode_change end
