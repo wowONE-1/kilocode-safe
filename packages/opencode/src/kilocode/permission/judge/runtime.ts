@@ -19,6 +19,7 @@ import { query } from "./query"
 import * as State from "./state"
 import * as Scope from "./scope"
 import * as Audit from "./telemetry"
+import type { Authority } from "./context"
 
 const names: Record<string, string> = {
   bash: "run_shell_command",
@@ -139,6 +140,7 @@ export interface Proposal {
   // Callers must supply direct user text and bare prior calls only. The wrapper
   // applies history() at the Kilo message boundary before entering this function.
   messages: Content[]
+  contextUnavailable?: boolean
   rules: Permission.Ruleset
   signal: AbortSignal
 }
@@ -162,7 +164,9 @@ export async function evaluateProposal(input: Proposal, provider?: Config["query
   const forced = scoped && !isInSafeToolAllowlist(name)
   const finish = (value: Omit<Verdict, "durationMs" | "unavailable">): Verdict => ({
     ...value,
-    unavailable: value.reasonCode === "classifier_unavailable" || value.reasonCode === "scope_projection_unavailable",
+    unavailable: ["classifier_unavailable", "scope_projection_unavailable", "scope_context_unavailable"].includes(
+      value.reasonCode,
+    ),
     durationMs: performance.now() - start,
   })
   const file = typeof input.args.filePath === "string" ? path.resolve(input.directory, input.args.filePath) : undefined
@@ -179,6 +183,15 @@ export async function evaluateProposal(input: Proposal, provider?: Config["query
       reasonCode: "rule_deny",
       grant: false,
     })
+  if (forced && input.contextUnavailable) {
+    return finish({
+      decision: "ask",
+      route: "fallback",
+      reasonCode: "scope_context_unavailable",
+      grant: false,
+      reason: "The original user's authorization is unavailable. Restore the root conversation before this action.",
+    })
+  }
   const ctx = {
     toolName: name,
     filePath: file,
@@ -300,6 +313,7 @@ export function wrap(
     directory: string
     model: Provider.Model
     messages: MessageV2.WithParts[]
+    authority?: Authority
     rules: Permission.Ruleset
     ask: (name: string, args: Record<string, unknown>, options: ToolExecutionOptions, reason: string) => Promise<void>
     query?: Config["query"]
@@ -320,7 +334,14 @@ export function wrap(
           model: input.model,
           name,
           args: params,
-          messages: history(input.messages),
+          messages:
+            input.authority && Scope.enabled(mode)
+              ? [
+                  ...history(input.authority.messages),
+                  ...history(input.messages).filter((message) => message.role === "model"),
+                ]
+              : history(input.messages),
+          contextUnavailable: input.authority?.unavailable,
           rules: input.rules,
           signal: options.abortSignal ?? new AbortController().signal,
         },
