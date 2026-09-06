@@ -190,6 +190,7 @@ export const dict = {
   "prompt.action.stop": "Остановить",
   "prompt.action.enhance": "Улучшить промпт",
   "prompt.action.autoApprove.enable": "Включить автоодобрение",
+  "prompt.action.permissionMode": "Выбрать режим разрешений (сейчас: {{mode}})",
   "prompt.action.autoApprove.disable": "Отключить автоодобрение",
   "prompt.action.autoApprove.enabled": "Автоодобрение включено. Запросы разрешений будут одобряться автоматически.",
   "prompt.action.autoApprove.disabled":

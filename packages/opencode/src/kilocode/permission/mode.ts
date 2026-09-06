@@ -1,6 +1,6 @@
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
-export const values = ["auto", "vanilla", "secure", "ask"] as const
+export const values = ["auto", "vanilla", "secure", "ask", "dos_llms_secure"] as const
 export type Value = (typeof values)[number]
 
 const permission = "kilo_permission_mode"
@@ -15,7 +15,9 @@ export function rule(value: Value): PermissionV1.Rule {
 }
 
 export function configured(rules: PermissionV1.Ruleset | undefined): Value | undefined {
-  const item = rules?.findLast((item) => item.permission === permission && item.action === "allow" && valid(item.pattern))
+  const item = rules?.findLast(
+    (item) => item.permission === permission && item.action === "allow" && valid(item.pattern),
+  )
   return item && valid(item.pattern) ? item.pattern : undefined
 }
 
@@ -47,7 +49,7 @@ export function fromMetadata(value: Record<string, unknown> | undefined): Value 
 }
 
 export function isSecure(value: unknown): boolean {
-  return value === undefined || value === "secure" || value === "ask"
+  return value === undefined || value === "secure" || value === "ask" || value === "dos_llms_secure"
 }
 
 export function withMetadata(value: Value, data: Record<string, unknown> | undefined) {

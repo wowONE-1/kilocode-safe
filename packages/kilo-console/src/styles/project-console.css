@@ -347,6 +347,21 @@
   padding: 0.5rem;
 }
 
+.kilo-console .project-permission {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.kilo-console .project-permission small {
+  color: var(--muted-foreground);
+}
+
+.kilo-console .project-permission .models-select-menu {
+  top: auto;
+  bottom: 100%;
+}
+
 .kilo-console .project-console-main {
   display: flex;
   flex-direction: column;

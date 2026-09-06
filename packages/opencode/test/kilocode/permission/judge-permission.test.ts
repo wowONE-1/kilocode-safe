@@ -11,6 +11,11 @@ import { InstanceStore } from "@/project/instance-store"
 import { Permission } from "@/permission"
 import { MessageID, SessionID } from "@/session/schema"
 import { approval } from "@/kilocode/permission/judge/approval"
+import { wrap } from "@/kilocode/permission/judge/runtime"
+import * as Mode from "@/kilocode/permission/mode"
+import { ProviderTest } from "../../fake/provider"
+import { TestInstance } from "../../fixture/fixture"
+import { jsonSchema } from "ai"
 import { testEffect } from "../../lib/effect"
 
 const env = Layer.mergeAll(
@@ -61,6 +66,7 @@ it.instance(
       for (const variant of [
         { ...request, tool: { ...request.tool, callID: "different" } },
         { ...request, metadata: { securityReview: true } },
+        { ...request, metadata: Mode.withMetadata("dos_llms_secure", { securityReview: true }) },
         { ...request, ruleset: [{ permission: "bash", pattern: "*", action: "ask" as const, source: "project" }] },
       ]) {
         const pending = yield* Effect.promise(() =>
@@ -79,6 +85,65 @@ it.instance(
         )
         expect(pending._tag).toBe("Failure")
       }
+    }),
+  { git: true },
+)
+
+it.instance(
+  "dos_llms_secure fast-path approval cannot bypass a secure denial",
+  () =>
+    Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      const run = yield* EffectBridge.make()
+      const fixture = yield* TestInstance
+      const session = SessionID.make("session_combined")
+      const rules = [{ permission: "read", pattern: "*", action: "ask" as const }]
+      const execute = (deny: boolean) => {
+        const tools = wrap(
+          {
+            read: {
+              inputSchema: jsonSchema({ type: "object" }),
+              execute: async (_args, options) => {
+                const result = await run.promise(
+                  permission.ask({
+                    sessionID: session,
+                    permission: "read",
+                    patterns: ["README.md"],
+                    always: [],
+                    metadata: Mode.withMetadata(
+                      "dos_llms_secure",
+                      deny ? { securityDeny: true, securityReview: true } : {},
+                    ),
+                    tool: { messageID: MessageID.make("msg_combined"), callID: options.toolCallId },
+                    ruleset: rules,
+                  }),
+                )
+                return result.manual ? "manual" : "allowed"
+              },
+            },
+          },
+          {
+            mode: "dos_llms_secure",
+            id: session,
+            directory: fixture.directory,
+            model: ProviderTest.model(),
+            messages: [],
+            rules,
+            ask: async () => {
+              throw new Error("unexpected classifier fallback")
+            },
+          },
+        )
+        return tools.read.execute!(
+          {},
+          { toolCallId: "call_combined", messages: [], abortSignal: new AbortController().signal },
+        )
+      }
+      expect(yield* Effect.promise(() => Promise.resolve(execute(false)))).toBe("allowed")
+      yield* Effect.promise(async () => {
+        await expect(Promise.resolve(execute(true))).rejects.toThrow()
+      })
+      expect(yield* permission.list()).toHaveLength(0)
     }),
   { git: true },
 )

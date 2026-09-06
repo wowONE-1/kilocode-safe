@@ -1113,9 +1113,15 @@
         },
         "kilo-code.new.permissionMode.default": {
           "type": "string",
-          "enum": ["auto", "vanilla", "secure", "ask"],
+          "enum": [
+            "auto",
+            "vanilla",
+            "secure",
+            "ask",
+            "dos_llms_secure"
+          ],
           "default": "secure",
-          "description": "Default permission mode: automatic approval, vanilla Kilo permissions, security checks, or ask every action."
+          "description": "Default permission mode: automatic approval, vanilla Kilo permissions, security checks, ask every action, or two-stage LLM review with security checks."
         },
         "kilo-code.new.maxCost": {
           "type": "number",

@@ -192,6 +192,7 @@ export const dict = {
   "prompt.action.enhance": "Enhance prompt",
   "prompt.action.indexing": "Indexing settings",
   "prompt.action.autoApprove.enable": "Enable auto-approve",
+  "prompt.action.permissionMode": "Select permission mode (current: {{mode}})",
   "prompt.action.autoApprove.disable": "Disable auto-approve",
   "prompt.action.autoApprove.enabled": "Auto-approve is enabled. Permission prompts will be approved automatically.",
   "prompt.action.autoApprove.disabled": "Auto-approve is disabled. Click to approve permission prompts automatically.",

@@ -986,6 +986,7 @@ export interface AgentManagerKeybindingsMessage {
 export interface AutoApproveStateMessage {
   type: "autoApproveState"
   active: boolean
+  mode: string
 }
 
 export interface SandboxStatusMessage {

@@ -2,6 +2,21 @@
 
 Local `kilo run --mode mode_dos_llm_as_a_judge` uses Qwen Code's AUTO policy: deterministic guards, read/edit fast paths, a fast LLM verdict, then LLM review of a flagged action. `mode_prompt_guard_with_llm` replaces only that first classifier call with Prompt Guard 2. A benign first-stage result skips review. Classifier failures never grant permission.
 
+`dos_llms_secure` combines the existing two-stage Qwen judge with the `secure` policy:
+
+- Both judges use the selected agent model: up to 256 output tokens for the first stage and 4096 for review, with the existing 10/30-second deadlines.
+- Review runs only when the first stage flags the action; existing deterministic guards and read/edit fast paths remain.
+- Secure file-read injection detection and package-install checks still run. A judge approval cannot override a security denial or a required security review. Headless runs reject requests that need manual approval.
+- The combined policy is saved on the session and inherited by child sessions. It cannot be combined with bypass flags or a weaker permission policy.
+
+Select **Kilo Code: Select Permission Mode → Dos LLMs + Secure** in VS Code, or run:
+
+```bash
+kilo run --mode dos_llms_secure --model localjudge/qwen3:14b-q4_K_M --dir /path/to/workspace "Run the tests"
+```
+
+`--permission-mode dos_llms_secure` selects the same policy. The provider/model identifier must match your configured provider. Existing modes keep their behavior; no additional model is downloaded.
+
 Both modes retain Kilo's explicit deny/ask rules, protected configuration checks and sandbox restrictions. Manual fallbacks are rejected in this headless CLI integration. Child sessions inherit the mode; approval applies only to the checked tool invocation. The modes cannot be combined with `--auto`, `--yolo`, `--attach` or interactive mode. Existing daemon processes are bypassed. Other runs keep their existing behavior.
 
 ## Local setup

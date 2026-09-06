@@ -17,7 +17,7 @@ function defer<T>() {
   return { promise, resolve: state.resolve, reject: state.reject }
 }
 
-function config(initial: boolean, info: Record<string, unknown> = {}) {
+function config(initial: boolean, info: Record<string, unknown> = {}, mode: Record<string, unknown> = {}) {
   const handlers: Array<(event: ConfigEvent) => void> = []
   const updates: Array<{ key: string; value: unknown; target: unknown }> = []
   const messages: string[] = []
@@ -33,12 +33,15 @@ function config(initial: boolean, info: Record<string, unknown> = {}) {
       onDidChangeConfiguration: (listener: (event: ConfigEvent) => void) => { dispose(): void }
     }
     window: { showInformationMessage: (message: string) => Promise<undefined> }
-    commands: { registerCommand: (command: string, callback: (...args: unknown[]) => unknown) => { dispose(): void } }
+    commands: {
+      registerCommand: (command: string, callback: (...args: unknown[]) => unknown) => { dispose(): void }
+      executeCommand: (command: string) => Promise<unknown>
+    }
   }
 
-  api.workspace.getConfiguration = () => ({
+  api.workspace.getConfiguration = (section) => ({
     get: (_key, fallback) => state.active ?? fallback,
-    inspect: () => info,
+    inspect: () => (section === "kilo-code.new.permissionMode" ? mode : info),
     update: async (key, value, target) => {
       updates.push({ key, value, target })
       state.active = Boolean(value)
@@ -61,6 +64,7 @@ function config(initial: boolean, info: Record<string, unknown> = {}) {
     commands.set(command, callback)
     return { dispose: () => undefined }
   }
+  api.commands.executeCommand = async (command) => commands.get(command)?.()
 
   return {
     updates,
@@ -114,7 +118,79 @@ function asked(id: string, sessionID = "ses_1") {
 }
 
 describe("registerToggleAutoApprove", () => {
-  it("restores persisted state, follows config changes, and persists toggles to the closest configured scope", async () => {
+  it.each(["auto", "vanilla", "secure", "ask", "dos_llms_secure"])(
+    "selects %s from the chat permission picker and sends it to the session",
+    async (mode) => {
+      const env = config(false)
+      const updates: unknown[] = []
+      const posts: unknown[] = []
+      const api = vscode.window as unknown as {
+        showQuickPick: (items: Array<{ mode: string }>) => Promise<{ mode: string } | undefined>
+      }
+      api.showQuickPick = async (items) => {
+        expect(items.map((item) => item.mode).sort()).toEqual(["ask", "auto", "dos_llms_secure", "secure", "vanilla"])
+        return items.find((item) => item.mode === mode)
+      }
+      const conn = connection({
+        session: {
+          get: async () => ({ data: { permission: [] } }),
+          update: async (input: unknown) => {
+            updates.push(input)
+          },
+        },
+      } as unknown as KiloClient)
+      const ctrl = registerToggleAutoApprove(
+        context(),
+        conn.svc,
+        () => "/repo",
+        () => ["/repo"],
+      )
+      const bridge = createAutoApproveBridge(ctrl, (msg) => posts.push(msg))
+      expect(await bridge.handle({ type: "selectPermissionMode" })).toBeNull()
+      expect(env.updates).toEqual([{ key: "default", value: mode, target: vscode.ConfigurationTarget.Global }])
+      expect(posts).toEqual([{ type: "autoApproveState", active: mode === "auto", mode }])
+      await ctrl.apply("ses_1", "/repo")
+      expect(updates).toEqual([
+        {
+          sessionID: "ses_1",
+          directory: "/repo",
+          permission: [{ permission: "kilo_permission_mode", pattern: mode, action: "allow" }],
+        },
+      ])
+      bridge.dispose()
+    },
+  )
+
+  it("persists dos_llms_secure on the session without auto-approving security requests", async () => {
+    config(false, {}, { globalValue: "dos_llms_secure" })
+    const updates: unknown[] = []
+    const conn = connection({
+      session: {
+        get: async () => ({ data: { permission: [] } }),
+        update: async (input: unknown) => {
+          updates.push(input)
+        },
+      },
+    } as unknown as KiloClient)
+    const ctrl = registerToggleAutoApprove(
+      context(),
+      conn.svc,
+      () => "/repo",
+      () => ["/repo"],
+    )
+    await ctrl.apply("ses_combined", "/repo")
+    expect(updates).toEqual([
+      {
+        sessionID: "ses_combined",
+        directory: "/repo",
+        permission: [{ permission: "kilo_permission_mode", pattern: "dos_llms_secure", action: "allow" }],
+      },
+    ])
+    expect(ctrl.active()).toBe(false)
+    expect(await ctrl.approve(asked("security_review"))).toBe(false)
+  })
+
+  it("restores legacy state, follows config changes, and persists toggles as permission modes", async () => {
     const env = config(true, { workspaceValue: false })
     const replies: unknown[] = []
     const conn = connection(client({ reply: async (args) => replies.push(args) }))
@@ -142,7 +218,7 @@ describe("registerToggleAutoApprove", () => {
     await ctrl.toggle()
     expect(ctrl.active()).toBe(true)
     expect(changes).toEqual([false, true])
-    expect(env.updates).toEqual([{ key: "enabled", value: true, target: vscode.ConfigurationTarget.Workspace }])
+    expect(env.updates).toEqual([{ key: "default", value: "auto", target: vscode.ConfigurationTarget.Global }])
     expect(env.messages).toContain("Auto-approve enabled")
   })
 
@@ -253,6 +329,8 @@ describe("createAutoApproveBridge", () => {
     const state = { active: false }
     const ctrl: AutoApproveController = {
       active: () => state.active,
+      mode: () => (state.active ? "auto" : "secure"),
+      apply: async () => undefined,
       approve: async () => false,
       toggle: async () => {
         state.active = !state.active
@@ -279,9 +357,9 @@ describe("createAutoApproveBridge", () => {
     expect(await bridge.handle({ type: "other" })).toEqual({ type: "forwarded" })
 
     expect(posts).toEqual([
-      { type: "autoApproveState", active: false },
-      { type: "autoApproveState", active: false },
-      { type: "autoApproveState", active: true },
+      { type: "autoApproveState", active: false, mode: "secure" },
+      { type: "autoApproveState", active: false, mode: "secure" },
+      { type: "autoApproveState", active: true, mode: "auto" },
     ])
     expect(forwarded).toEqual([{ type: "webviewReady" }, { type: "other" }])
 

@@ -91,7 +91,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   )
   const finish = () =>
     Judge.wrap(tools, {
-      mode: judging,
+      mode: securityMode === "dos_llms_secure" ? securityMode : judging,
       id: input.session.id,
       directory: Instance.directory,
       model: input.model,
