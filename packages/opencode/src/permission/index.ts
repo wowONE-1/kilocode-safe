@@ -20,6 +20,7 @@ import { ReadPermission } from "@/kilocode/permission/read"
 import { AgentManagerPermission } from "@/kilocode/permission/agent-manager" // kilocode_change
 import { approval as judgeApproval } from "@/kilocode/permission/judge/approval" // kilocode_change
 import { ExternalDirectoryPermission } from "@/kilocode/permission/external-directory"
+import * as PermissionMode from "@/kilocode/permission/mode" // kilocode_change
 // kilocode_change end
 
 export const Event = PermissionV1.Event
@@ -221,7 +222,8 @@ const layer = Layer.effect(
         : false
       // kilocode_change end
 
-      const forceAsk = forced(request.metadata) // kilocode_change
+      const mode = PermissionMode.fromMetadata(request.metadata) // kilocode_change
+      const forceAsk = forced(request.metadata) || mode === "ask" // kilocode_change
       // kilocode_change start - prompt-injection findings are never forwarded to the model
       if (request.metadata?.["securityDeny"] === true) {
         return yield* new DeniedError({
@@ -248,6 +250,12 @@ const layer = Layer.effect(
           // kilocode_change - carry the deciding rule (not just the permission subset) for provenance
           return yield* new DeniedError({ ruleset: rule })
         }
+        // kilocode_change start - auto mode approves ordinary permissions but preserves explicit denials and hard asks
+        if (mode === "auto" && !forceAsk && (!isProtected || trusted)) {
+          approvedRule = { ...rule, action: "allow" }
+          continue
+        }
+        // kilocode_change end
         // kilocode_change start - skill shell forces a prompt instead of honoring an allow/auto-approve rule
         if (forceAsk) {
           needsAsk = true

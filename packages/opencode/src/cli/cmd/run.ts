@@ -258,6 +258,11 @@ export const RunCommand = effectCmd({
         choices: ["mode_dos_llm_as_a_judge", "mode_prompt_guard_with_llm"] as const,
         describe: "Qwen AUTO permission classifier mode",
       })
+      .option("permission-mode", {
+        type: "string",
+        choices: ["auto", "vanilla", "secure", "ask"] as const,
+        describe: "permission policy: auto, vanilla, secure checks, or ask every action",
+      })
       // kilocode_change end
       .option("auto", {
         type: "boolean",
@@ -291,6 +296,7 @@ export const RunCommand = effectCmd({
       () => import("@/kilocode/cloud-session"),
     )
     const JudgeState = yield* Effect.promise(() => import("@/kilocode/permission/judge/state")) // kilocode_change
+    const PermissionMode = yield* Effect.promise(() => import("@/kilocode/permission/mode")) // kilocode_change
     const { KiloRunAuto } = yield* Effect.promise(() => import("@/kilocode/cli/run-auto"))
     const { KiloRunDrain } = yield* Effect.promise(() => import("@/kilocode/cli/run-drain"))
     const { KiloHeadless } = yield* Effect.promise(() => import("@/kilocode/permission/headless"))
@@ -786,6 +792,16 @@ export const RunCommand = effectCmd({
           process.exit(1)
         }
         const sessionID = sess.id
+        // kilocode_change start - persist the selected permission policy on this session before tools resolve
+        const permissionMode = args["permission-mode"]
+        if (PermissionMode.valid(permissionMode)) {
+          await sdk.session.update({
+            sessionID,
+            directory: sess.directory ?? directory,
+            permission: [PermissionMode.rule(permissionMode)],
+          })
+        }
+        // kilocode_change end
         // kilocode_change start - track Task children; plain headless runs deny subagent asks instead of hanging (#11903)
         if (args.mode) JudgeState.register(sessionID, args.mode) // kilocode_change
         const tracked = KiloRunAuto.create(sessionID) // kilocode_change - named to avoid shadowing the `auto` flag
@@ -1244,6 +1260,10 @@ export async function runMini(input: MiniCommandInput) {
     "replay-limit": input.replayLimit,
     replayLimit: input.replayLimit,
     mode: undefined, // kilocode_change
+    // kilocode_change start
+    "permission-mode": undefined,
+    permissionMode: undefined,
+    // kilocode_change end
     auto: false,
     yolo: false,
     "dangerously-skip-permissions": false,

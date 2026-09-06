@@ -35,6 +35,7 @@ import * as JudgeState from "@/kilocode/permission/judge/state" // kilocode_chan
 import { Instance } from "@/kilocode/instance" // kilocode_change
 import { SessionID } from "./schema" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import * as PermissionMode from "@/kilocode/permission/mode" // kilocode_change
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -83,6 +84,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(sessions.get(SessionID.make(id))).then((session) => session.parentID),
     ),
   )
+  const securityMode = yield* Effect.promise(() =>
+    PermissionMode.inherited(input.session, (id) =>
+      run.promise(sessions.get(SessionID.make(id))).then((session) => session),
+    ),
+  )
   const finish = () =>
     Judge.wrap(tools, {
       mode: judging,
@@ -125,6 +131,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       promptOps: input.promptOps,
       sandboxed, // kilocode_change
       sandboxEscalation: false,
+      securityMode, // kilocode_change
     }
     return {
       sessionID: input.session.id,
@@ -146,6 +153,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           session: input.session,
           request: {
             ...req,
+            metadata: PermissionMode.withMetadata(securityMode, req.metadata),
             sessionID: input.session.id,
             tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           },

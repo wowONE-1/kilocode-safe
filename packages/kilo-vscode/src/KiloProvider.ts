@@ -459,6 +459,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   private viewStateDisposable: vscode.Disposable | null = null
   private visibilityDisposable: vscode.Disposable | null = null
   private autoApproveBridge: ReturnType<typeof createAutoApproveBridge> | null = null
+  private autoApproveController: Parameters<typeof createAutoApproveBridge>[0] | null = null
   private readonly marketplaceRemove = createMarketplaceRemover()
 
   private ignoreController: FileIgnoreController | null = null
@@ -515,6 +516,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
   }
 
   setAutoApproveController(ctrl: Parameters<typeof createAutoApproveBridge>[0]): void {
+    this.autoApproveController = ctrl
     this.autoApproveBridge?.dispose()
     this.autoApproveBridge = createAutoApproveBridge(ctrl, (msg) => this.postMessage(msg), this.onBeforeMessage)
     this.onBeforeMessage = (msg) => this.autoApproveBridge!.handle(msg)
@@ -4031,6 +4033,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (sandbox) await sandbox
       const sid = resolved.sid
       const dir = resolved.dir
+      await this.autoApproveController?.apply(sid, dir)
 
       const parts: Array<TextPartInput | FilePartInput> = []
       if (files) {
@@ -4122,6 +4125,7 @@ export class KiloProvider implements vscode.WebviewViewProvider, TelemetryProper
       if (sandbox) await sandbox
       const sid = resolved.sid
       const dir = resolved.dir
+      await this.autoApproveController?.apply(sid, dir)
 
       if (messageID) {
         this.connectionService.recordMessageSessionId(messageID, sid)

@@ -14,16 +14,21 @@ export type DirectoryResolver = (sessionId?: string) => string
  */
 export type AllDirectories = () => string[]
 type Asked = Extract<Event, { type: "permission.asked" }>
+export const permissionModes = ["auto", "vanilla", "secure", "ask"] as const
+export type PermissionMode = (typeof permissionModes)[number]
 
 export interface AutoApproveController {
   active(): boolean
   approve(event: Asked, directory?: string): Promise<boolean>
   toggle(): Promise<boolean>
+  apply(sessionID: string, directory: string): Promise<void>
   onChange(listener: (active: boolean) => void): { dispose(): void }
 }
 
 const CONFIG = "kilo-code.new.autoApprove"
 const KEY = "enabled"
+const MODE_CONFIG = "kilo-code.new.permissionMode"
+const MODE_KEY = "default"
 
 /**
  * Runtime auto-accept toggle for permissions.
@@ -38,35 +43,36 @@ export function registerToggleAutoApprove(
   resolve: DirectoryResolver,
   directories: AllDirectories,
 ): AutoApproveController {
-  let active = readActive()
+  let mode = readMode()
   // Bumped on disable to invalidate in-flight enable drains
   let generation = 0
   const listeners = new Set<(active: boolean) => void>()
 
   const notify = () => {
-    for (const listener of listeners) listener(active)
+    for (const listener of listeners) listener(mode === "auto")
   }
 
-  const setActive = async (next: boolean) => {
-    active = next
+  const setMode = async (next: PermissionMode) => {
+    mode = next
     generation++
     notify()
-    await vscode.workspace.getConfiguration(CONFIG).update(KEY, active, target())
+    await vscode.workspace.getConfiguration(MODE_CONFIG).update(MODE_KEY, mode, target(MODE_CONFIG, MODE_KEY))
+    return mode
   }
 
   const toggle = async () => {
-    await setActive(!active)
+    await setMode(mode === "auto" ? "secure" : "auto")
     const snapshot = generation
 
-    if (!active) {
+    if (mode !== "auto") {
       vscode.window.showInformationMessage("Auto-approve disabled")
-      return active
+      return false
     }
 
     vscode.window.showInformationMessage("Auto-approve enabled")
     // Drain any already-pending permission requests across all tracked directories
     const client = tryGetClient(connectionService)
-    if (!client) return active
+    if (!client) return true
     for (const dir of directories()) {
       if (generation !== snapshot) break
       try {
@@ -85,11 +91,11 @@ export function registerToggleAutoApprove(
       }
     }
 
-    return active
+    return true
   }
 
   const approve = async (event: Asked, directory?: string) => {
-    if (!active) return false
+    if (mode !== "auto") return false
     const client = tryGetClient(connectionService)
     if (!client) return false
     if (event.properties.metadata?.["sandboxEscalation"] === true) return false
@@ -106,23 +112,60 @@ export function registerToggleAutoApprove(
       )
   }
 
+  const apply = async (sessionID: string, directory: string) => {
+    const client = tryGetClient(connectionService)
+    if (!client) return
+    try {
+      const current = await client.session.get({ sessionID, directory }, { throwOnError: true })
+      if (currentMode(current.data?.permission) === mode) return
+      await client.session.update(
+        {
+          sessionID,
+          directory,
+          permission: [{ permission: "kilo_permission_mode", pattern: mode, action: "allow" }],
+        },
+        { throwOnError: true },
+      )
+    } catch (err) {
+      console.error("[Kilo New] permission mode: failed to apply:", err)
+    }
+  }
+
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (!event.affectsConfiguration(`${CONFIG}.${KEY}`)) return
-      const next = readActive()
-      if (next === active) return
-      active = next
+      const hasMode = configuredMode() !== undefined
+      if (!event.affectsConfiguration(`${MODE_CONFIG}.${MODE_KEY}`) && (hasMode || !event.affectsConfiguration(`${CONFIG}.${KEY}`))) return
+      const next = readMode()
+      if (next === mode) return
+      mode = next
       generation++
       notify()
     }),
   )
 
   context.subscriptions.push(vscode.commands.registerCommand("kilo-code.new.toggleAutoApprove", toggle))
+  context.subscriptions.push(
+    vscode.commands.registerCommand("kilo-code.new.selectPermissionMode", async () => {
+      const selected = await vscode.window.showQuickPick(
+        [
+          { label: "Auto-approve", detail: "Approve ordinary Kilo permission requests automatically", mode: "auto" },
+          { label: "Vanilla Kilo", detail: "Use normal Kilo permissions without custom security checks", mode: "vanilla" },
+          { label: "Security checks", detail: "Use the prompt-injection and package-install checks", mode: "secure" },
+          { label: "Ask every action", detail: "Prompt before each non-denied tool action", mode: "ask" },
+        ] satisfies Array<{ label: string; detail: string; mode: PermissionMode }>,
+        { placeHolder: "Select Kilo permission mode" },
+      )
+      if (!selected) return
+      await setMode(selected.mode)
+      vscode.window.showInformationMessage(`Kilo permission mode: ${selected.label}`)
+    }),
+  )
 
   return {
-    active: () => active,
+    active: () => mode === "auto",
     approve,
     toggle,
+    apply,
     onChange(listener) {
       listeners.add(listener)
       let disposed = false
@@ -141,8 +184,26 @@ function readActive(): boolean {
   return vscode.workspace.getConfiguration(CONFIG).get(KEY, false)
 }
 
-function target(): vscode.ConfigurationTarget {
-  const info = vscode.workspace.getConfiguration(CONFIG).inspect<boolean>(KEY)
+function readMode(): PermissionMode {
+  const value = configuredMode()
+  if (permissionModes.includes(value as PermissionMode)) return value as PermissionMode
+  return readActive() ? "auto" : "secure"
+}
+
+function configuredMode(): unknown {
+  const info = vscode.workspace.getConfiguration(MODE_CONFIG).inspect<unknown>(MODE_KEY)
+  return info?.workspaceFolderValue ?? info?.workspaceValue ?? info?.globalValue
+}
+
+function currentMode(rules: ReadonlyArray<{ permission: string; pattern: string; action: string }> | undefined): PermissionMode | undefined {
+  const value = rules?.findLast(
+    (item) => item.permission === "kilo_permission_mode" && item.action === "allow" && permissionModes.includes(item.pattern as PermissionMode),
+  )?.pattern
+  return permissionModes.includes(value as PermissionMode) ? (value as PermissionMode) : undefined
+}
+
+function target(config: string, key: string): vscode.ConfigurationTarget {
+  const info = vscode.workspace.getConfiguration(config).inspect<unknown>(key)
   if (info?.workspaceFolderValue !== undefined) return vscode.ConfigurationTarget.WorkspaceFolder
   if (info?.workspaceValue !== undefined) return vscode.ConfigurationTarget.Workspace
   return vscode.ConfigurationTarget.Global

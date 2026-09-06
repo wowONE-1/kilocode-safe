@@ -18,6 +18,7 @@ import { KiloSessionMessageOrder } from "@/kilocode/session/message-order"
 import { KiloSessionPromptQueue } from "@/kilocode/session/prompt-queue"
 import { Permission } from "@/permission"
 import { PermissionProvenance } from "@/kilocode/permission/provenance"
+import * as PermissionMode from "@/kilocode/permission/mode" // kilocode_change
 import { Question } from "@/question"
 import { environmentDetails } from "@/kilocode/editor-context"
 import { Identifier } from "@/id/id"
@@ -336,7 +337,7 @@ export namespace KiloSessionPrompt {
     // guardPermissions re-appends agent.permission for ask/plan/architect modes and prepends
     // session.permission, so tag those inputs up front rather than the outer copy alone.
     const taggedAgent = PermissionProvenance.tagAgent(input.agent.permission, input.origins)
-    const taggedSession = PermissionProvenance.tagSession(input.session.permission ?? [])
+    const taggedSession = PermissionProvenance.tagSession(PermissionMode.without(input.session.permission ?? []))
     const ruleset = dedupeRuleset(
       Permission.merge(
         taggedAgent,

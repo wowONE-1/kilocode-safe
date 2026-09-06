@@ -450,6 +450,11 @@
         "category": "Kilo Code"
       },
       {
+        "command": "kilo-code.new.selectPermissionMode",
+        "title": "Select Permission Mode",
+        "category": "Kilo Code"
+      },
+      {
         "command": "kilo-code.new.generateTerminalCommand",
         "title": "Generate Terminal Command",
         "category": "Kilo Code"
@@ -1105,6 +1110,12 @@
           "type": "boolean",
           "default": false,
           "description": "Start Kilo Code with the main auto-approve toggle enabled. When enabled, permission prompts are approved automatically."
+        },
+        "kilo-code.new.permissionMode.default": {
+          "type": "string",
+          "enum": ["auto", "vanilla", "secure", "ask"],
+          "default": "secure",
+          "description": "Default permission mode: automatic approval, vanilla Kilo permissions, security checks, or ask every action."
         },
         "kilo-code.new.maxCost": {
           "type": "number",

@@ -20,6 +20,7 @@ import { KiloReadObject } from "@/kilocode/tool/read-object"
 import * as Extract from "../kilocode/tool/read-extract"
 import * as TextStream from "../kilocode/text-stream"
 import { SecurityTrace } from "@/kilocode/security/trace"
+import * as PermissionMode from "@/kilocode/permission/mode"
 // kilocode_change end
 
 const DEFAULT_READ_LIMIT = 2000
@@ -347,24 +348,26 @@ export const ReadTool = Tool.define<
             ctx.abort,
           )
           // kilocode_change start - block suspicious text before returning it to the model
-          const signals = yield* Effect.sync(() => {
-            const found = SecurityTrace.file({ path: bound.target, text: file.raw.join("\n") })
-            for (const item of loaded) found.push(...SecurityTrace.file({ path: item.filepath, text: item.content }))
-            return Array.from(new Set(found))
-          })
-          if (signals.length > 0) {
-            yield* ctx.ask({
-              permission: "security_prompt_injection",
-              patterns: [path.relative(instance.worktree, bound.target)],
-              always: [],
-              metadata: {
-                filepath: bound.target,
-                signals,
-                description: `Potential prompt injection detected: ${signals.join(", ")}. The text was blocked before reaching the agent.`,
-                securityDeny: true,
-                securityReview: true,
-              },
+          if (PermissionMode.isSecure(ctx.extra?.["securityMode"])) {
+            const signals = yield* Effect.sync(() => {
+              const found = SecurityTrace.file({ path: bound.target, text: file.raw.join("\n") })
+              for (const item of loaded) found.push(...SecurityTrace.file({ path: item.filepath, text: item.content }))
+              return Array.from(new Set(found))
             })
+            if (signals.length > 0) {
+              yield* ctx.ask({
+                permission: "security_prompt_injection",
+                patterns: [path.relative(instance.worktree, bound.target)],
+                always: [],
+                metadata: {
+                  filepath: bound.target,
+                  signals,
+                  description: `Potential prompt injection detected: ${signals.join(", ")}. The text was blocked before reaching the agent.`,
+                  securityDeny: true,
+                  securityReview: true,
+                },
+              })
+            }
           }
           // kilocode_change end
           if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
