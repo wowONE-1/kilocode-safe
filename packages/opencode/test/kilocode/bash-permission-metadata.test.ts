@@ -86,6 +86,21 @@ describe("bash permission metadata.command", () => {
     })
   })
 
+  test("uses the package review as the only prompt for a direct install", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await runtime.runPromise(ShellTool.pipe(Effect.flatMap((info) => info.init())))
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        await Effect.runPromise(bash.execute({ command: "bun add file:./package" }, capture(requests)))
+
+        expect(requests).toHaveLength(1)
+        expect(requests[0]).toMatchObject({ permission: "security_package" })
+      },
+    })
+  })
+
   test("permission prompt shows raw command without tool name prefix", async () => {
     await using tmp = await tmpdir()
     await provideTestInstance({

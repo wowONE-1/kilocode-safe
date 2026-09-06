@@ -9,7 +9,11 @@ const installers = [
   },
   {
     registry: "pypi" as const,
-    pattern: /(?:^|&&|\|\||;)\s+uv\s+(?:add|pip\s+install)(?:\s+([^;&|]+))?/g,
+    pattern: /(?:^|&&|\|\||;)\s*uv\s+(?:add|pip\s+install)(?:\s+([^;&|]+))?/g,
+  },
+  {
+    registry: "pypi" as const,
+    pattern: /(?:^|&&|\|\||;)\s*(?:poetry|pdm)\s+add(?:\s+([^;&|]+))?/g,
   },
 ]
 
@@ -32,7 +36,8 @@ const values = new Set([
 const npmName = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i
 const pypiName = /^[a-z0-9][a-z0-9._-]*$/i
 const exact = /^\d+(?:\.\d+){0,2}(?:[-+][0-9a-z.-]+)?$/i
-const custom = /(?:--registry|--index-url|--extra-index-url|--find-links)\b/
+const custom = /(?:--registry|--index-url|--extra-index-url|--find-links|--source)\b/
+const outside = /(?:^|\s)(?:-g|--global|--prefix|--root|--target)(?:\s|=|$)/
 const popular = [
   "axios",
   "django",
@@ -57,6 +62,7 @@ const popular = [
 ]
 const week = 7 * 24 * 60 * 60 * 1000
 const month = 30 * 24 * 60 * 60 * 1000
+const year = 365 * 24 * 60 * 60 * 1000
 
 type Registry = "npm" | "pypi" | "unknown"
 type Verdict = "allow" | "ask" | "deny"
@@ -78,6 +84,7 @@ type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 type Options = {
   fetch?: Fetch
   now?: number
+  ignoreScripts?: boolean
 }
 
 function record(value: unknown) {
@@ -138,6 +145,12 @@ function pypi(value: string): PackageInfo {
   return { registry: "pypi", name, spec: value, version }
 }
 
+function poetry(value: string) {
+  const index = value.lastIndexOf("@")
+  if (index <= 0) return pypi(value)
+  return pypi(value.slice(0, index) + "==" + value.slice(index + 1))
+}
+
 function date(value: unknown) {
   const parsed = Date.parse(string(value) ?? "")
   return Number.isNaN(parsed) ? undefined : parsed
@@ -147,6 +160,16 @@ function recent(value: unknown, now: number, limit = week) {
   const parsed = date(value)
   if (parsed === undefined) return
   return now - parsed < limit
+}
+
+function mature(value: unknown, versions: Record<string, unknown> | undefined, now: number) {
+  const parsed = date(value)
+  if (parsed === undefined || now - parsed < year) return false
+  return Object.keys(versions ?? {}).length >= 5
+}
+
+function ignorescripts(command: string) {
+  return /(?:^|\s)--ignore-scripts(?:\s|$|=true(?:\s|$))/.test(command)
 }
 
 function distance(left: string, right: string) {
@@ -215,14 +238,15 @@ async function checkNpm(input: PackageInfo, options: Required<Options>): Promise
   const versions = record(meta?.versions)
   const version = input.version && input.version !== "latest" ? input.version : string(tags?.latest)
   const item = record(version ? versions?.[version] : undefined)
-  if (!meta || !version || !item) return review(input, "deny", ["invalid-registry-metadata"])
+  if (!meta || !version || !item) return review(input, "ask", ["invalid-registry-metadata"])
   const near = similar(input.name)
+  const trusted = mature(record(meta.time)?.created, versions, options.now)
 
   const reasons = [
-    ...(recent(record(meta.time)?.[version], options.now) ? ["recent-release"] : []),
+    ...(recent(record(meta.time)?.[version], options.now) && !trusted ? ["recent-release"] : []),
     ...(recent(record(meta.time)?.created, options.now, month) ? ["recent-package"] : []),
     ...(Object.keys(versions ?? {}).length < 2 ? ["single-version"] : []),
-    ...(scripts(item.scripts) ? ["lifecycle-script"] : []),
+    ...(scripts(item.scripts) && !options.ignoreScripts && !trusted ? ["lifecycle-script"] : []),
     ...(string(record(item.dist)?.integrity) ? [] : ["missing-integrity"]),
     ...(string(item.deprecated) ? ["deprecated"] : []),
     ...(near ? ["similar-to-" + near] : []),
@@ -243,13 +267,20 @@ async function checkPypi(input: PackageInfo, options: Required<Options>): Promis
     version && Array.isArray(releases?.[version])
       ? releases[version].map(record).filter((item): item is Record<string, unknown> => item !== undefined)
       : []
-  if (!meta || !version || files.length === 0) return review(input, "deny", ["invalid-registry-metadata"])
+  if (!meta || !version || files.length === 0) return review(input, "ask", ["invalid-registry-metadata"])
   if (files.some((item) => item?.yanked === true)) return review(input, "deny", ["yanked-release"])
 
   const uploaded = files.map((item) => item?.upload_time_iso_8601).find((item) => date(item) !== undefined)
   const near = similar(input.name)
+  const dates = Object.values(releases ?? {})
+    .flatMap((value) => (Array.isArray(value) ? value : []))
+    .map(record)
+    .map((item) => item?.upload_time_iso_8601)
+    .filter((item): item is string => typeof item === "string" && date(item) !== undefined)
+  const oldest = dates.toSorted((left, right) => (date(left) ?? 0) - (date(right) ?? 0)).at(0)
+  const trusted = mature(oldest, releases, options.now)
   const reasons = [
-    ...(recent(uploaded, options.now) ? ["recent-release"] : []),
+    ...(recent(uploaded, options.now) && !trusted ? ["recent-release"] : []),
     ...(uploaded ? [] : ["missing-release-date"]),
     ...(Object.keys(releases ?? {}).length < 2 ? ["single-version"] : []),
     ...(files.some((item) => string(record(item.digests)?.sha256)) ? [] : ["missing-integrity"]),
@@ -273,15 +304,33 @@ export namespace Slopsquatting {
           if (args.length === 0) {
             return [{ registry: "unknown" as const, name: "declared-dependencies", spec: "declared-dependencies" }]
           }
-          return args.map((item) => (installer.registry === "npm" ? npm(item) : pypi(item)))
+          return args.map((item) => {
+            if (installer.registry === "npm") return npm(item)
+            if (/\b(?:poetry|pdm)\s+add\b/.test(match.at(0) ?? "")) return poetry(item)
+            return pypi(item)
+          })
         }),
       )
       .filter((item, index, list) => list.findIndex((value) => value.spec === item.spec) === index)
   }
 
+  export function handles(command: string) {
+    const input = command.trim()
+    if (!input || /[;&|`$<>\n]/.test(input) || outside.test(input)) return false
+    return installers.some((installer) => {
+      const flags = installer.pattern.flags.replace("g", "")
+      const regex = new RegExp(installer.pattern.source, flags)
+      return regex.exec(input)?.at(0)?.trim() === input
+    })
+  }
+
   export async function inspect(command: string, options: Options = {}): Promise<ReviewInfo[]> {
     const input = packages(command)
-    const opts = { fetch: options.fetch ?? globalThis.fetch, now: options.now ?? Date.now() }
+    const opts = {
+      fetch: options.fetch ?? globalThis.fetch,
+      now: options.now ?? Date.now(),
+      ignoreScripts: options.ignoreScripts ?? ignorescripts(command),
+    }
     return Promise.all(
       input.map((item) => {
         if (item.registry === "npm") return checkNpm(item, opts)

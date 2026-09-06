@@ -432,43 +432,52 @@ export const ShellPermission = Effect.gen(function* () {
         const scan = yield* collect(tree.rootNode, input.cwd, ps, input.shell, instance)
         const metadata = heredocs(tree.rootNode, ShellID.toKind(Shell.name(input.shell))) // kilocode_change
         // kilocode_change start - inspect package metadata only in guarded modes
-        if (PermissionMode.isSecure(ctx.extra?.["securityMode"])) {
-          yield* Effect.sync(() =>
-            SecurityTrace.command({ command: input.command, cwd: input.cwd, patterns: Array.from(scan.patterns) }),
-          )
-          const reviews = yield* Effect.promise(() => Slopsquatting.inspect(input.command))
-          const denied = reviews.filter((item) => item.verdict === "deny")
-          const asked = reviews.filter((item) => item.verdict === "ask")
-          const targets = denied.length > 0 ? denied : asked
-          if (targets.length > 0) {
-            const packages = targets.map((item) => item.name)
-            const reasons = targets.flatMap((item) => item.reasons.map((reason) => item.name + ": " + reason))
-            const deny = denied.length > 0
-            yield* ctx.ask({
-              permission: "security_package",
-              patterns: [input.command],
-              always: [],
-              metadata: {
-                command: normalizeUrls(input.command),
-                cwd: input.cwd,
-                packages,
-                reasons,
-                checks: targets,
-                description: deny
-                  ? "Package installation blocked: " + reasons.join(", ") + "."
-                  : "Package installation needs security review: " + reasons.join(", ") + ".",
-                ...(deny ? { securityDeny: true, securityReason: reasons.join(", ") } : {}),
-                securityReview: true,
-              },
+        const mode = ctx.extra?.["securityMode"]
+        const secure = PermissionMode.isSecure(mode)
+        const handled = secure && Slopsquatting.handles(input.command)
+        const controlled = secure
+          ? yield* Effect.gen(function* () {
+              yield* Effect.sync(() =>
+                SecurityTrace.command({ command: input.command, cwd: input.cwd, patterns: Array.from(scan.patterns) }),
+              )
+              const reviews = yield* Effect.promise(() => Slopsquatting.inspect(input.command))
+              const denied = reviews.filter((item) => item.verdict === "deny")
+              const asked = reviews.filter((item) => item.verdict === "ask")
+              const targets = denied.length > 0 ? denied : asked
+              if (targets.length > 0) {
+                const packages = targets.map((item) => item.name)
+                const reasons = targets.flatMap((item) => item.reasons.map((reason) => item.name + ": " + reason))
+                const deny = denied.length > 0
+                yield* ctx.ask({
+                  permission: "security_package",
+                  patterns: [input.command],
+                  always: [],
+                  metadata: {
+                    command: normalizeUrls(input.command),
+                    cwd: input.cwd,
+                    packages,
+                    reasons,
+                    checks: targets,
+                    description: deny
+                      ? "Package installation blocked: " + reasons.join(", ") + "."
+                      : "Package installation needs security review: " + reasons.join(", ") + ".",
+                    ...(deny ? { securityDeny: true, securityReason: reasons.join(", ") } : {}),
+                    securityReview: true,
+                  },
+                })
+              }
+              return handled && (mode !== "ask" || targets.length > 0)
             })
-          }
-        }
+          : false
         // kilocode_change end
-        if (!containsPath(input.cwd, instance)) {
+        const external = !containsPath(input.cwd, instance)
+        if (external) {
           scan.dirs.add(input.cwd)
           scan.access = "unknown"
         }
-        yield* ask(ctx, scan, input.command, metadata, input.description) // kilocode_change
+        if (!controlled || external) {
+          yield* ask(ctx, scan, input.command, metadata, input.description) // kilocode_change
+        }
         const gitMutation = commands(tree.rootNode).some((node) => mutatesGit(node.text))
         if (input.escalate && gitMutation) {
           yield* ctx.ask({
