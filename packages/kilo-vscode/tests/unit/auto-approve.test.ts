@@ -6,7 +6,7 @@ import type { Event, KiloClient } from "@kilocode/sdk/v2/client"
 import type { KiloConnectionService } from "../../src/services/cli-backend/connection-service"
 
 type ConfigEvent = { affectsConfiguration(key: string): boolean }
-type Permission = { id: string }
+type Permission = { id: string; metadata?: Record<string, unknown> }
 
 function defer<T>() {
   const state = {} as { resolve: (value: T) => void; reject: (err: unknown) => void }
@@ -118,6 +118,56 @@ function asked(id: string, sessionID = "ses_1") {
 }
 
 describe("registerToggleAutoApprove", () => {
+  it.each(["sandboxEscalation", "securityReview", "configProtected", "judgeFallback", "securityDeny", "skillShell"])(
+    "does not automatically answer a protected %s request",
+    async (key) => {
+      config(true)
+      const replies: unknown[] = []
+      const conn = connection(client({ reply: async (args) => replies.push(args) }))
+      const ctrl = registerToggleAutoApprove(
+        context(),
+        conn.svc,
+        () => "/repo",
+        () => ["/repo"],
+      )
+      const event = asked("protected")
+      event.properties.metadata = { [key]: true }
+      expect(await ctrl.approve(event)).toBe(false)
+      expect(replies).toEqual([])
+      expect(await ctrl.approve(asked("ordinary"))).toBe(true)
+      expect(replies).toHaveLength(1)
+    },
+  )
+
+  it("leaves protected pending requests for the user when Auto is enabled", async () => {
+    config(false)
+    const replies: unknown[] = []
+    const flags = [
+      "sandboxEscalation",
+      "securityReview",
+      "configProtected",
+      "judgeFallback",
+      "securityDeny",
+      "skillShell",
+    ]
+    const conn = connection(
+      client({
+        list: async () => ({
+          data: [...flags.map((key) => ({ id: key, metadata: { [key]: true } })), { id: "ordinary" }],
+        }),
+        reply: async (args) => replies.push(args),
+      }),
+    )
+    const ctrl = registerToggleAutoApprove(
+      context(),
+      conn.svc,
+      () => "/repo",
+      () => ["/repo"],
+    )
+    await ctrl.toggle()
+    expect(replies).toEqual([{ requestID: "ordinary", directory: "/repo", reply: "once" }])
+  })
+
   it.each(["auto", "vanilla", "secure", "ask", "dos_llms_secure"])(
     "selects %s from the chat permission picker and sends it to the session",
     async (mode) => {

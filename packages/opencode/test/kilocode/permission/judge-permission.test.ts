@@ -147,3 +147,89 @@ it.instance(
     }),
   { git: true },
 )
+
+it.instance(
+  "audit exposes a later security veto without logging payloads",
+  () =>
+    Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      const run = yield* EffectBridge.make()
+      const fixture = yield* TestInstance
+      const session = SessionID.make("session_audit")
+      const rows: Array<Record<string, unknown>> = []
+      const previous = process.env.KILO_PERMISSION_TRACE
+      const output = console.error
+      process.env.KILO_PERMISSION_TRACE = "1"
+      console.error = (value?: unknown) => {
+        if (typeof value === "string" && value.startsWith("[kilo-permission] ")) rows.push(JSON.parse(value.slice(18)))
+      }
+      try {
+        const tools = wrap(
+          {
+            read: {
+              inputSchema: jsonSchema({ type: "object" }),
+              execute: async (_args, options) =>
+                run.promise(
+                  permission.ask({
+                    sessionID: session,
+                    permission: "security_package",
+                    patterns: ["SENSITIVE_PAYLOAD"],
+                    always: [],
+                    metadata: Mode.withMetadata("dos_llms_secure", {
+                      securityDeny: true,
+                      securityReview: true,
+                      securityReason: "SENSITIVE_REASON",
+                    }),
+                    tool: { messageID: MessageID.make("msg_audit"), callID: options.toolCallId },
+                    ruleset: [],
+                  }),
+                ),
+            },
+          },
+          {
+            mode: "dos_llms_secure",
+            id: session,
+            directory: fixture.directory,
+            model: ProviderTest.model(),
+            messages: [],
+            rules: [],
+            ask: async () => {
+              throw new Error("No classifier fallback expected")
+            },
+          },
+        )
+        yield* Effect.promise(async () => {
+          await expect(
+            Promise.resolve(
+              tools.read.execute!(
+                {},
+                { toolCallId: "call_audit", messages: [], abortSignal: new AbortController().signal },
+              ),
+            ),
+          ).rejects.toThrow()
+        })
+        expect(rows).toHaveLength(2)
+        expect(rows[0]).toMatchObject({
+          stage: "judge",
+          mode: "dos_llms_secure",
+          decision: "allow",
+          call_id: "call_audit",
+        })
+        expect(rows[1]).toMatchObject({
+          stage: "permission",
+          mode: "dos_llms_secure",
+          decision: "deny",
+          route: "security",
+          call_id: "call_audit",
+          human_requested: false,
+        })
+        expect(JSON.stringify(rows)).not.toContain("SENSITIVE_PAYLOAD")
+        expect(JSON.stringify(rows)).not.toContain("SENSITIVE_REASON")
+      } finally {
+        console.error = output
+        if (previous === undefined) delete process.env.KILO_PERMISSION_TRACE
+        else process.env.KILO_PERMISSION_TRACE = previous
+      }
+    }),
+  { git: true },
+)

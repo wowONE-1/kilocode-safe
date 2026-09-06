@@ -21,6 +21,7 @@ import { AgentManagerPermission } from "@/kilocode/permission/agent-manager" // 
 import { approval as judgeApproval } from "@/kilocode/permission/judge/approval" // kilocode_change
 import { ExternalDirectoryPermission } from "@/kilocode/permission/external-directory"
 import * as PermissionMode from "@/kilocode/permission/mode" // kilocode_change
+import * as PermissionAudit from "@/kilocode/permission/judge/telemetry" // kilocode_change
 // kilocode_change end
 
 export const Event = PermissionV1.Event
@@ -197,6 +198,7 @@ const layer = Layer.effect(
       const { approved, pending } = yield* InstanceState.get(state)
       // kilocode_change start
       const { ruleset, hardRuleset, ...request } = input
+      const trace = PermissionAudit.begin(request)
       const s = yield* InstanceState.get(state)
       const local = s.session[request.sessionID] ?? []
       // kilocode_change end
@@ -226,6 +228,7 @@ const layer = Layer.effect(
       const forceAsk = forced(request.metadata) || mode === "ask" // kilocode_change
       // kilocode_change start - prompt-injection findings are never forwarded to the model
       if (request.metadata?.["securityDeny"] === true) {
+        trace("deny", "security", "security_deny")
         return yield* new DeniedError({
           ruleset: {
             permission: request.permission,
@@ -243,11 +246,13 @@ const layer = Layer.effect(
         yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         // kilocode_change start — saved/session approvals cannot override hard Ask/Plan denials
         if (veto(request.permission, pattern, hardRuleset)) {
+          trace("deny", "rule", "hard_rule_deny")
           return yield* new DeniedError({ ruleset: subset(request.permission, hardRuleset ?? []) })
         }
         // kilocode_change end
         if (rule.action === "deny") {
           // kilocode_change - carry the deciding rule (not just the permission subset) for provenance
+          trace("deny", "rule", "rule_deny") // kilocode_change
           return yield* new DeniedError({ ruleset: rule })
         }
         // kilocode_change start - auto mode approves ordinary permissions but preserves explicit denials and hard asks
@@ -285,10 +290,16 @@ const layer = Layer.effect(
         needsAsk = true
       }
 
-      if (!needsAsk) return { manual: false, rule: approvedRule } // kilocode_change - report auto-approval
+      // kilocode_change start - record the actual permission boundary, not just the outer judge
+      if (!needsAsk) {
+        trace("allow", "permission", "approved")
+        return { manual: false, rule: approvedRule }
+      }
+      // kilocode_change end
 
       // kilocode_change start - headless subagent asks fail instead of queuing for a reply that never comes (#11903)
       if (yield* KiloHeadless.denies(request.sessionID).pipe(Effect.provideService(Database.Service, database))) {
+        trace("ask", "headless", "manual_review_unavailable")
         return yield* new DeniedError({ ruleset: subset(request.permission, ruleset) })
       }
       // kilocode_change end
@@ -316,6 +327,7 @@ const layer = Layer.effect(
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, ruleset, hardRuleset, deferred }) // kilocode_change
       yield* events.publish(Event.Asked, info) // kilocode_change - was bus.publish
+      trace("ask", "permission", forceAsk ? "forced_review" : "permission_ask", !KiloHeadless.marked(request.sessionID)) // kilocode_change
       // kilocode_change start - was `return yield* Effect.ensuring(...)`; report the manual decision to callers
       yield* Effect.ensuring(
         Deferred.await(deferred),

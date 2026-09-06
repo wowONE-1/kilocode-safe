@@ -80,7 +80,7 @@ export function registerToggleAutoApprove(
         const { data: pending } = await client.permission.list({ directory: dir }, { throwOnError: true })
         for (const req of pending) {
           if (generation !== snapshot) break
-          if (req.metadata?.["sandboxEscalation"] === true) continue
+          if (sensitive(req.metadata)) continue
           await client.permission
             .reply({ requestID: req.id, directory: dir, reply: "once" }, { throwOnError: true })
             .catch((err) => {
@@ -99,7 +99,7 @@ export function registerToggleAutoApprove(
     if (mode !== "auto") return false
     const client = tryGetClient(connectionService)
     if (!client) return false
-    if (event.properties.metadata?.["sandboxEscalation"] === true) return false
+    if (sensitive(event.properties.metadata)) return false
     const dir =
       directory ?? connectionService.getPermissionDirectory(event.properties.id) ?? resolve(event.properties.sessionID)
     return client.permission
@@ -173,7 +173,7 @@ export function registerToggleAutoApprove(
             detail: "Use two-stage LLM review (256 / 4096 tokens) plus security checks",
             mode: "dos_llms_secure",
           },
-          { label: "Ask", detail: "Ask once before each non-denied tool action", mode: "ask" },
+          { label: "Ask", detail: "Ask at each permission boundary, with security checks", mode: "ask" },
         ] satisfies Array<{ label: string; detail: string; mode: PermissionMode }>,
         { placeHolder: "Select Kilo permission mode" },
       )
@@ -201,6 +201,12 @@ export function registerToggleAutoApprove(
       }
     },
   }
+}
+
+function sensitive(metadata: Record<string, unknown> | undefined) {
+  return ["sandboxEscalation", "securityReview", "configProtected", "judgeFallback", "securityDeny", "skillShell"].some(
+    (key) => metadata?.[key] === true,
+  )
 }
 
 function readActive(): boolean {

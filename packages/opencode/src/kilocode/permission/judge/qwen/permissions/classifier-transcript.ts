@@ -30,6 +30,7 @@
 
 import type { Content, Part } from '../compat.js';
 import type { ToolRegistry } from '../compat.js';
+import { MAX_USER_CHARS } from '../../scope';
 
 /** Registered-name prefix every discovered MCP tool carries. */
 const MCP_TOOL_NAME_PREFIX = 'mcp__';
@@ -99,6 +100,7 @@ export function buildClassifierContents(
   messages: readonly Content[],
   toolRegistry: ToolRegistry,
   pendingAction: PendingAction,
+  preserveUser = false,
 ): Content[] {
   const transcript: Content[] = [];
   // Indices into `transcript` of rendered historical actions, with the
@@ -108,10 +110,16 @@ export function buildClassifierContents(
   // Slice to the recent window before processing. Truncating after the
   // assistant/user/function filtering would produce uneven windows when a
   // session accumulates many tool-result records.
-  const recent =
-    messages.length > MAX_TRANSCRIPT_MESSAGES
-      ? messages.slice(-MAX_TRANSCRIPT_MESSAGES)
-      : messages;
+  const start = Math.max(0, messages.length - MAX_TRANSCRIPT_MESSAGES);
+  const recent = preserveUser
+    ? messages.filter((message, index) => message.role === 'user' || index >= start)
+    : messages.slice(start);
+  if (preserveUser) {
+    const size = recent.filter((message) => message.role === 'user').reduce(
+      (size, message) => size + (message.parts ?? []).reduce(
+        (size, part) => size + (typeof part.text === 'string' ? part.text.length : 0), 0), 0);
+    if (size > MAX_USER_CHARS) throw new Error('Direct user context exceeds scope review budget');
+  }
 
   for (const msg of recent) {
     if (msg.role === 'user') {
