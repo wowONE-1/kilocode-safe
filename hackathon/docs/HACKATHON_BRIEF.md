@@ -485,3 +485,10 @@ performance, or a requirement to implement five buttons/dynamic permissions.
 Current execution state remains governed by D-008 and CURRENT_STATE.md: the
 full comparison is incomplete and the runtime selection is unresolved in those
 local records. This note authorizes no implementation or model runs.
+
+
+## 2026-09-07 — User revision: seven main slides and separate Q&A
+
+**Explicit user requirement / team presentation decision:** the user requested at most six–seven substantive main slides. The revised deck has 19 slides: seven main slides including the cover and team, a separate Q&A slide 8, and detailed appendix slides 9–19. This supersedes the prior 17-slide layout with 11 main slides for the current deliverable. Main order: product, team, permission approaches with the user's slogan, compact architecture, recorded tool-output injection, pre-install package example, and Auto-versus-Dos results with relative task time. The five modes, scope explanation, risk matrix, full three-arm metrics, timing detail, provenance, failures, PG, scope detail, FP and pilot remain in the appendix.
+
+**Chosen delivery plan:** target 4:40–4:45 for slides 1–7, then show Q&A; no speaker notes in the exported PPTX. Instructions remain in the separate pitch runbook. This is an explicit user-driven presentation decision, not a new organizer requirement or external reference. Frozen benchmark values are unchanged. The relative-time comparison is approximately +13% to the median on 65 common normally completed Auto/Dos runs, including attacks and functional failures; it is distinct from the 38 legitimate-task utility denominator and is not pure judge overhead. Sources: current user revision, presentation source and the derived review_metrics.json audit; recorded 2026-09-07.
