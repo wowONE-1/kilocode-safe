@@ -31,7 +31,7 @@ for name in list(items):
                 for column_index,cell in enumerate(row.findall('{%s}tc'%A)):
                     # Center each mode in four-column comparison tables so adjacent
                     # outcomes remain visually separate in PowerPoint and PDF.
-                    if name in {f'ppt/slides/slide{i}.xml' for i in [8,9,10,11,12,14]} and len(row.findall('{%s}tc'%A))==4 and column_index>0:
+                    if name in {f'ppt/slides/slide{i}.xml' for i in [10,11,12,13,14,16]} and len(row.findall('{%s}tc'%A))==4 and column_index>0:
                         for para in cell.findall('.//{%s}p'%A):
                             para_props=para.find('{%s}pPr'%A)
                             if para_props is None:
@@ -58,7 +58,7 @@ for name in list(items):
                 E.SubElement(node,'{%s}srgbClr'%A,val='FA5416')
         save(name,root)
 # Source links remain native text hyperlinks in editable text and table cells.
-all_links={3:{ledger_context['external_approval_footer']:ledger_metrics['external']['anthropic_permission_approval']['url']},15:{'Код Kilo [2]':'https://github.com/wowONE-1/kilocode-safe/tree/'+ledger_metrics['publication_versions']['kilo_measured_commit']+'/packages/opencode/src/kilocode/permission','Бенчмарк [3]':'https://github.com/dimkablin/vibesechack/tree/'+ledger_metrics['publication_versions']['harness_results_commit'],'Qwen reference [4]':'https://qwenlm.github.io/qwen-code-docs/en/users/features/auto-mode/'}}
+all_links={17:{'Код Kilo [2]':'https://github.com/wowONE-1/kilocode-safe/tree/'+ledger_metrics['publication_versions']['kilo_measured_commit']+'/packages/opencode/src/kilocode/permission','Бенчмарк [3]':'https://github.com/dimkablin/vibesechack/tree/'+ledger_metrics['publication_versions']['harness_results_commit'],'Qwen reference [4]':'https://qwenlm.github.io/qwen-code-docs/en/users/features/auto-mode/'}}
 for page,links in all_links.items():
     name=f'ppt/slides/slide{page}.xml';slide=E.fromstring(items[name]);relsname=f'ppt/slides/_rels/slide{page}.xml.rels';linksrels=E.fromstring(items[relsname]);found=[]
     for para in slide.findall('.//{%s}p'%A):

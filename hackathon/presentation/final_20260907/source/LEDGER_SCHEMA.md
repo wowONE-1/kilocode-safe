@@ -1,6 +1,6 @@
 # Числовой реестр и контракт финального заполнения
 
-`final_metrics.json` — единственный реестр показателей, настроек и внешних числовых утверждений для Markdown и PPTX. `ledger_view.py` вычисляет дроби и секунды, создаёт общую модель исторической таблицы и раскрывает `{{tokens}}`. `render_materials.py`, `build_deck.mjs` и `postprocess.py` используют этот адаптер. `check_ledger.py` проверяет отсутствие неизвестных токенов и числовых дробей в авторских шаблонах, а также распространение изменения одной цифры в текст и таблицу.
+`final_metrics.json` — замороженный реестр результатов, настроек и внешних числовых утверждений для Markdown и PPTX. Производный аудит `review_metrics.json` отдельно рассчитывает относительное время на общих завершившихся запусках для слайда 11; он сохраняет происхождение данных и не заменяет значения замороженного реестра. `ledger_view.py` вычисляет дроби и секунды, создаёт общую модель исторической таблицы и раскрывает `{{tokens}}`. `render_materials.py`, `build_deck.mjs` и `postprocess.py` используют этот адаптер. `check_ledger.py` проверяет отсутствие неизвестных токенов и числовых дробей в авторских шаблонах, а также распространение изменения одной цифры в текст и таблицу.
 
 ## Не менять при заполнении свежей матрицы
 
@@ -16,21 +16,23 @@
 
 Глобальный `status` остаётся `pending`, пока весь заявленный срез не проверен. После сверки исходов и исключений установить `status=frozen`, `freeze_utc`, точные `source_commit`, `model`, `fresh_conditions`, `test_summary`, `evidence_paths` и `publication`. Поля с `ОЖИДАЕТ` блокируют final export. Исторические блоки сохраняются.
 
-Все таблицы состоят из строковых ячеек: первая строка — заголовки. Числовая ячейка содержит counts `n/N` и явную единицу, где нужна. Наблюдение, которого нет, обозначается словами; его нельзя заменять нулём. Markdown получает те же строки, что PPTX. Текст ячейки желательно ограничить двумя короткими строками.
+Все таблицы состоят из строковых ячеек: первая строка — заголовки. Числовая ячейка содержит counts `n/N` и явную единицу, где нужна. Наблюдение, которого нет, обозначается словами; его нельзя заменять нулём. Markdown сохраняет исходные counts; на слайде 10 те же числители и знаменатели из `fresh_full70_counts` пересчитываются в проценты. В приложении counts остаются видимыми. Текст ячейки желательно ограничить двумя короткими строками.
 
 | Поле | Максимальная форма | Куда попадает | Что должно быть видно |
 | --- | --- | --- | --- |
-| `main_rows` | 4 строки × 4 столбца | Слайд 8, решение/validation | ASR всех атак; utility; safe utility; Auto / Secure / Dos |
-| `risk_rows` | 5 × 3 | Слайд 7, решение | Угроза → контроль → наблюдаемый статус с границей вывода |
-| `fresh_breakdown_rows` | 4 × 4 | Слайд 9, решение/validation | Casegiver / team-adapted / все атаки, раздельные denominators по A/S/D |
-| `fresh_attack_rows` | 5 × 4 | Слайд 11, решение/validation | A07/A12/A18/N12 с эффектом и отдельными исходами A/S/D; N12 — ordinary |
-| `fresh_ablation_rows` | 4 × 4 | Слайд 12, решение/validation | Dos / Dos+PG и парное изменение ASR, utility, safe utility на общих units |
-| `scope_rows` | 5 × 5 | Слайд 13, решение/validation | Auto / Secure / Dos scope-off / Dos; файл, папка, разрешённая задача, unsafe allow прямых proposals — отдельные единицы |
-| `fresh_diagnostics_rows` | 6 × 4 | Слайд 14, решение/validation | A/S/D: FP и coverage; gate asks; gate p50/p95; task p50/p95; CLI errors/timeouts |
+| `main_rows` | 4 строки × 4 столбца | Решение/validation; те же исходы, что слайд 10 | ASR всех атак; utility; safe utility; Auto / Secure / Dos |
+| `fresh_full70_counts` | 3 режима × 3 показателя | Слайд 10 | Проценты исходных counts; определения ASR, utility и safe utility сохраняются |
+| `review_metrics.json` | Общая выборка Auto/Dos | Слайд 11 | Медиана и 95-й перцентиль времени всей задачи, относительная разница и ограничение выборки |
+| `risk_rows` | 5 × 3 | Слайд 9, решение | Угроза → контроль → наблюдаемый статус с границей вывода |
+| `fresh_breakdown_rows` | 4 × 4 | Слайд 12, решение/validation | Casegiver / team-adapted / все атаки, раздельные denominators по A/S/D |
+| `fresh_attack_rows` | 5 × 4 | Слайд 13, решение/validation | A07/A12/A18/N12 с эффектом и отдельными исходами A/S/D; N12 — ordinary |
+| `fresh_ablation_rows` | 4 × 4 | Слайд 14, решение/validation | Dos / Dos+PG и парное изменение ASR, utility, safe utility на общих units |
+| `scope_rows` | 5 × 5 | Слайд 15, решение/validation | Auto / Secure / Dos scope-off / Dos; файл, папка, разрешённая задача, unsafe allow прямых proposals — отдельные единицы |
+| `fresh_diagnostics_rows` | 6 × 4 | Слайд 16, решение/validation | A/S/D: FP и coverage; gate asks; gate p50/p95; task p50/p95; CLI errors/timeouts |
 
-К каждой свежей таблице приложить короткую видимую подпись: `fresh_breakdown_note`, `fresh_attack_note`, `fresh_ablation_note`, `fresh_diagnostics_note`, `slide_scope_line`. Рекомендуемый размер подписи — до двух строк на слайде. Детали и границы хранятся в `main_interpretation`, `scope_interpretation`, `package_interpretation`, `fresh_ablation_interpretation`, `fresh_diagnostics_interpretation`, `scope_claim`, `remaining_gaps`. Они входят в Markdown и speaker notes.
+К каждой свежей таблице приложить короткую видимую подпись: `fresh_breakdown_note`, `fresh_attack_note`, `fresh_ablation_note`, `fresh_diagnostics_note`, `slide_scope_line`. Рекомендуемый размер подписи — до двух строк на слайде. Детали и границы хранятся в `main_interpretation`, `scope_interpretation`, `package_interpretation`, `fresh_ablation_interpretation`, `fresh_diagnostics_interpretation`, `scope_claim`, `remaining_gaps`. Они входят в отдельные Markdown-материалы. Важные ограничения видны на самих слайдах; заметки докладчика в финальный PPTX не экспортируются.
 
-`slide_conditions` и `slide_conclusion` задают короткие условия и вывод слайда 8. `fresh_demo` пока резервное поле верхнего уровня: текущий подтверждённый trace берётся из `demonstrations.main`, он отделён от глобальной статистики.
+`slide_conditions` и `slide_conclusion` сохраняют условия и вывод основной оценки; слайд 10 соответствует той же оценке. `fresh_demo` пока резервное поле. Слайд 6 использует сохранённый tool-output trace `demo_trace_pg_867a122591d1.json` с Meta включённым; отдельный `demo.html` использует `demonstrations.main` с Meta выключенным. Оба примера отделены от общей статистики; записанный отказ нельзя приписать одному Meta.
 
 ## Правила интерпретации
 
@@ -39,10 +41,11 @@
 - FP считать только по независимой разметке разрешённых действий. Указать общий выбранный task-срез, action denominators каждого режима, coverage и пропущенные классы событий.
 - Gate asks являются наблюдаемыми запросами/решениями системы; headless experiment не измеряет реальную нагрузку на человека.
 - Gate timing исключает root-context DB loading и pre-permission registry lookup; task time включает их. Семантический model timing отделяется от fast paths. Эти времена не являются чистым добавленным overhead без соответствующего сопоставления.
+- Относительное время считается на одинаковых нормально завершившихся запусках Auto и Dos. Это описательное сравнение всей задачи, а не чистая стоимость judge; ошибки и таймауты исключены только из этой выборки времени и остаются в общей диагностике.
 - ASR не включает ordinary N12 и accidental scope. Marker A07 не является утечкой; вызов A18 после смены версии не доказывает exfiltration.
 
 ## Сборка после фиксации
 
-Выполнить `check_ledger.py`, затем `render_materials.py --final`. После этого допускаются сборка PPTX, экспорт PDF и полный визуальный QA. В frozen-деке таблицы находятся на слайдах 7–14; исторический full70 остаётся на слайде 10, D-012 — в тексте/notes. Число слайдов остаётся 15. Геометрия, номера слайдов, timestamps, case/run IDs, версии модели и planned pitch timings являются идентификаторами или настройками оформления, а не hardcoded benchmark results.
+Выполнить `check_ledger.py`, затем `render_materials.py --final`. После этого допускаются сборка PPTX, экспорт PDF и полный визуальный QA. В frozen-деке таблицы находятся на слайдах 9–16 и показывают финальные результаты и производное сравнение времени. Основной рассказ — слайды 1–11, приложение — 12–17. Исторические данные сохраняются в реестре и материалах исследования. Число слайдов — 17; заметок докладчика в PPTX нет. Геометрия, номера слайдов, timestamps, case/run IDs, версии модели и planned pitch timings являются идентификаторами или настройками оформления, а не hardcoded benchmark results.
 
 Для речи используются отдельные краткие поля `pitch_results` (до55слов) и `pitch_scope` (до25слов). Подробные интерпретации не следует целиком вставлять в40-секундный фрагмент речи. Это редакционный лимит, а не измерение выступления.
