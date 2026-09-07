@@ -1,3 +1,21 @@
+# Team 3 — evaluated Kilo security fork
+
+This branch contains the hackathon security prototype and the [complete jury package, threat model and limitations](hackathon/README.md).
+The measured runtime is `b184d6358b4078e6087694097141b7d7e976a27e`; later commits add delivery documents only.
+Start with the [presentation PDF](hackathon/output/final/team3_project.pdf),
+[solution](hackathon/output/final/FINAL_SOLUTION.md), and
+[build/run instructions](hackathon/output/final/BUILD_AND_REPRODUCE.md).
+The [benchmark and audited results](https://github.com/dimkablin/vibesechack/tree/26ade7bf753a8e26af1a719096c820b095fa77d0)
+use that same runtime.
+
+The instructions below describe the upstream Kilo product. Marketplace and published package installs
+do not install this evaluated fork. For this build, use the pinned source/build instructions above.
+The five permission modes are Auto, Vanilla Kilo, Secure, Ask, and Dos LLMs + Secure;
+Dos adds up to two conditional stages of the same Qwen model plus Secure checks.
+Prompt Guard is a separate option, off by default. Textual scope review is probabilistic, not filesystem isolation.
+
+---
+
 <p align="center">
   English | <a href="translations/README.zh.md">简体中文</a> | <a href="translations/README.zht.md">繁體中文</a> | <a href="translations/README.ko.md">한국어</a> | <a href="translations/README.de.md">Deutsch</a> | <a href="translations/README.es.md">Español</a> | <a href="translations/README.fr.md">Français</a> | <a href="translations/README.it.md">Italiano</a> | <a href="translations/README.da.md">Dansk</a> | <a href="translations/README.ja.md">日本語</a> | <a href="translations/README.pl.md">Polski</a> | <a href="translations/README.ru.md">Русский</a> | <a href="translations/README.bs.md">Bosanski</a> | <a href="translations/README.ar.md">العربية</a> | <a href="translations/README.no.md">Norsk</a> | <a href="translations/README.br.md">Português (Brasil)</a> | <a href="translations/README.th.md">ไทย</a> | <a href="translations/README.tr.md">Türkçe</a> | <a href="translations/README.uk.md">Українська</a> | <a href="translations/README.bn.md">বাংলা</a> | <a href="translations/README.gr.md">Ελληνικά</a> | <a href="translations/README.vi.md">Tiếng Việt</a>
 </p>
@@ -147,7 +165,7 @@ Run `kilo run` with `--auto` for fully autonomous operation with no prompts, bui
 kilo run --auto "run tests and fix any failures"
 ```
 
-`--auto` disables all permission prompts and lets the agent execute any action without confirmation. Only use it in trusted environments.
+In this evaluated fork, Auto confirms ordinary permission requests; protected security requests still require a separate decision. For the combined action review, use `--permission-mode dos_llms_secure` without `--auto`. See the pinned fork instructions above for the exact behavior and limitations.
 
 ### Documentation
 

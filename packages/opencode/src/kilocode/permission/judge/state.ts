@@ -1,6 +1,6 @@
 import { createDenialState } from "./qwen/permissions/denialTracking"
 
-export const modes = ["mode_dos_llm_as_a_judge", "mode_prompt_guard_with_llm"] as const
+export const modes = ["mode_dos_llm_as_a_judge", "mode_prompt_guard_with_llm", "dos_llms_secure"] as const
 export type Mode = (typeof modes)[number]
 const roots = new Map<string, Mode>()
 const states = new Map<string, ReturnType<typeof createDenialState>>()

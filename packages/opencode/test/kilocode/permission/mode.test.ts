@@ -28,15 +28,26 @@ describe("permission mode", () => {
   })
 
   test("inherits the mode from a parent session", async () => {
-    const mode = await PermissionMode.inherited(
-      { id: "child", parentID: "parent" },
-      async (id) => (id === "parent" ? { id, permission: [PermissionMode.rule("vanilla")] } : undefined),
+    const mode = await PermissionMode.inherited({ id: "child", parentID: "parent" }, async (id) =>
+      id === "parent" ? { id, permission: [PermissionMode.rule("vanilla")] } : undefined,
     )
 
     expect(mode).toBe("vanilla")
   })
 
-  test("marks only secure and ask modes as security-checked", () => {
+  test("inherits dos_llms_secure and retains secure checks", async () => {
+    expect(PermissionMode.valid("dos_llms_secure")).toBe(true)
+    expect(PermissionMode.isSecure("dos_llms_secure")).toBe(true)
+    const rules = [{ permission: "kilo_permission_mode", pattern: "dos_llms_secure", action: "allow" as const }]
+    expect(
+      await PermissionMode.inherited({ id: "child", parentID: "parent" }, async () => ({
+        id: "parent",
+        permission: rules,
+      })),
+    ).toBe("dos_llms_secure")
+  })
+
+  test("keeps secure checks disabled for auto and vanilla", () => {
     expect(PermissionMode.isSecure("secure")).toBe(true)
     expect(PermissionMode.isSecure("ask")).toBe(true)
     expect(PermissionMode.isSecure(undefined)).toBe(true)

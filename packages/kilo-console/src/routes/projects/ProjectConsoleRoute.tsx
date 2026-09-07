@@ -12,6 +12,8 @@ import { SessionReview, type SessionReviewDiffStyle } from "@kilocode/kilo-web-u
 import { ConfirmDialog } from "../../components/ConfirmDialog"
 import { LoadingScreen } from "../../components/LoadingScreen"
 import { PromptDialog } from "../../components/PromptDialog"
+import { CustomSelect } from "../../components/CustomSelect"
+import { configured, modes, type PermissionMode } from "../../shared/permission"
 import {
   createProjectPty,
   createProjectWorktree,
@@ -27,6 +29,7 @@ import {
   resetProjectWorktree,
   resolveServer,
   saveCached,
+  setProjectPermission,
   subscribeProjectEvents,
   viewProjectSessions,
   type ProjectConsoleEvent,
@@ -167,6 +170,7 @@ export function ProjectConsoleRoute() {
   const [labelRev, setLabelRev] = createSignal(0)
   const [editor, setEditor] = createSignal<Editor | undefined>()
   const [pending, setPending] = createSignal<Pending | undefined>()
+  const [permission, setPermission] = createSignal<PermissionMode>("secure")
   const events = { timer: undefined as number | undefined }
   const resize = {
     timer: undefined as number | undefined,
@@ -222,6 +226,10 @@ export function ProjectConsoleRoute() {
   })
   const current = createMemo(() => contexts().find((item) => item.dir === selected()) ?? contexts()[0])
   const activeTerminal = createMemo(() => terminals().find((item) => item.id === active()))
+  const mode = createMemo(() => {
+    const session = activeTerminal()?.session
+    return session ? configured(session.permission) : permission()
+  })
   const target = createMemo<Query | undefined>(() => {
     const data = snap()
     const item = current()
@@ -461,7 +469,7 @@ export function ProjectConsoleRoute() {
     const label = `Kilo ${terminalsFor(item.dir).length + 1}`
     setSaving("Creating session")
     setFailure(undefined)
-    void createProjectPty(input, item.dir, label)
+    void createProjectPty(input, item.dir, label, mode())
       .then((pty) => {
         const next = { ...pty, directory: item.dir }
         setLocal((rows) => [...rows.filter((row) => row.id !== next.id), next])
@@ -472,6 +480,20 @@ export function ProjectConsoleRoute() {
       })
       .catch((err) => setFailure(errMsg(err)))
       .finally(() => setSaving(undefined))
+  }
+
+  function changePermission(value: PermissionMode) {
+    const item = activeTerminal()
+    const id = sessionID(item)
+    const base = query()
+    if (!item || !id || !base) {
+      setPermission(value)
+      return
+    }
+    run("Saving permission mode", async () => {
+      await setProjectPermission({ url: base.url, dir: item.directory }, id, value)
+      setPermission(value)
+    })
   }
 
   function forgetTerminal(id: string) {
@@ -905,6 +927,24 @@ export function ProjectConsoleRoute() {
           </section>
         </div>
         <div class="project-sidebar-bottom">
+          <div class="project-permission">
+            <span>Permissions</span>
+            <CustomSelect
+              label="Session permission mode"
+              value={mode()}
+              options={modes}
+              disabled={
+                !!saving() ||
+                (!!activeTerminal() &&
+                  (!activeTerminal()?.session || (activeTerminal()?.sessionStatus?.type ?? "idle") !== "idle"))
+              }
+              onSelect={changePermission}
+            />
+            <small>Applies to the selected session and new sessions. Change while idle.</small>
+            <Show when={mode() === "dos_llms_secure"}>
+              <small>Judges use the agent model. Manual review may still be required.</small>
+            </Show>
+          </div>
           <A class="project-settings-link" href={settings()}>
             <span>Project Settings</span>
             <small>Project configuration</small>

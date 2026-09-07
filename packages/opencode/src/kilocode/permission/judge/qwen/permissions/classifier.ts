@@ -29,6 +29,7 @@ import {
   STAGE2_SUFFIX,
 } from './classifier-prompts/system-prompt.js';
 import { buildClassifierContents } from './classifier-transcript.js';
+import { instruction as scopeInstruction } from '../../scope';
 
 // Tag-scoped logger so an operator debugging "every AUTO call gets
 // unavailable=true" can grep for [CLASSIFIER] in the debug log and see
@@ -152,8 +153,10 @@ export async function classifyAction(
       input.messages,
       input.config.getToolRegistry(),
       { toolName: input.toolName, toolParams: input.toolParams },
+      input.config.getAutoModeSettings().scopeReview === true,
     );
-    baseSystemPrompt = buildClassifierSystemPrompt(input.config);
+    baseSystemPrompt = buildClassifierSystemPrompt(input.config) +
+      (input.config.getAutoModeSettings().scopeReview ? scopeInstruction : '');
   } catch (err) {
     return failUnavailable(
       'Classifier prompt construction failed',

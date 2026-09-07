@@ -703,6 +703,7 @@ export async function evaluateAutoMode(
   // tools it's designed to cover.
   if (
     !input.pmForcedAsk &&
+    !input.config.getAutoModeSettings().scopeReview &&
     passesAcceptEditsFastPath(input.ctx, input.config)
   ) {
     return { via: 'fast-path:accept-edits' };

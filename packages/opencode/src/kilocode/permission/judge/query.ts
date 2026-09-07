@@ -5,6 +5,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { AppRuntime } from "@/effect/app-runtime"
 import type { Query } from "./qwen/config/config"
 import { guard } from "./guard"
+import { guarded } from "./scope"
 import type { Mode } from "./state"
 import z from "zod"
 
@@ -13,8 +14,10 @@ const review = z.object({ thinking: z.string(), shouldBlock: z.boolean(), reason
 
 export async function query(mode: Mode, model: Provider.Model, input: Query) {
   const text = input.contents.map((message) => message.parts?.map((part) => part.text ?? "").join("\n")).join("\n\n")
-  if (mode === "mode_prompt_guard_with_llm" && input.purpose === "permission_classifier_stage1") {
-    return guard(text, input.abortSignal)
+  if (guarded(mode) && input.purpose === "permission_classifier_stage1") {
+    // A benign injection score does not establish action authorization.
+    const verdict = await guard(text, input.abortSignal)
+    if (verdict.shouldBlock) return verdict
   }
   const language = await AppRuntime.runPromise(Provider.Service.use((svc) => svc.getLanguage(model)))
   const result = await generateObject({

@@ -14,11 +14,12 @@ export type DirectoryResolver = (sessionId?: string) => string
  */
 export type AllDirectories = () => string[]
 type Asked = Extract<Event, { type: "permission.asked" }>
-export const permissionModes = ["auto", "vanilla", "secure", "ask"] as const
+export const permissionModes = ["auto", "vanilla", "secure", "ask", "dos_llms_secure"] as const
 export type PermissionMode = (typeof permissionModes)[number]
 
 export interface AutoApproveController {
   active(): boolean
+  mode(): PermissionMode
   approve(event: Asked, directory?: string): Promise<boolean>
   toggle(): Promise<boolean>
   apply(sessionID: string, directory: string): Promise<void>
@@ -79,7 +80,7 @@ export function registerToggleAutoApprove(
         const { data: pending } = await client.permission.list({ directory: dir }, { throwOnError: true })
         for (const req of pending) {
           if (generation !== snapshot) break
-          if (req.metadata?.["sandboxEscalation"] === true) continue
+          if (sensitive(req.metadata)) continue
           await client.permission
             .reply({ requestID: req.id, directory: dir, reply: "once" }, { throwOnError: true })
             .catch((err) => {
@@ -98,7 +99,7 @@ export function registerToggleAutoApprove(
     if (mode !== "auto") return false
     const client = tryGetClient(connectionService)
     if (!client) return false
-    if (event.properties.metadata?.["sandboxEscalation"] === true) return false
+    if (sensitive(event.properties.metadata)) return false
     const dir =
       directory ?? connectionService.getPermissionDirectory(event.properties.id) ?? resolve(event.properties.sessionID)
     return client.permission
@@ -134,7 +135,11 @@ export function registerToggleAutoApprove(
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       const hasMode = configuredMode() !== undefined
-      if (!event.affectsConfiguration(`${MODE_CONFIG}.${MODE_KEY}`) && (hasMode || !event.affectsConfiguration(`${CONFIG}.${KEY}`))) return
+      if (
+        !event.affectsConfiguration(`${MODE_CONFIG}.${MODE_KEY}`) &&
+        (hasMode || !event.affectsConfiguration(`${CONFIG}.${KEY}`))
+      )
+        return
       const next = readMode()
       if (next === mode) return
       mode = next
@@ -148,10 +153,27 @@ export function registerToggleAutoApprove(
     vscode.commands.registerCommand("kilo-code.new.selectPermissionMode", async () => {
       const selected = await vscode.window.showQuickPick(
         [
-          { label: "Auto-approve", detail: "Approve ordinary Kilo permission requests automatically", mode: "auto" },
-          { label: "Vanilla Kilo", detail: "Use normal Kilo permissions without custom security checks", mode: "vanilla" },
-          { label: "Security checks", detail: "Use the prompt-injection and package-install checks", mode: "secure" },
-          { label: "Ask every action", detail: "Prompt before each non-denied tool action", mode: "ask" },
+          {
+            label: "Auto",
+            detail: "Approve ordinary requests automatically without custom security checks",
+            mode: "auto",
+          },
+          {
+            label: "Vanilla Kilo",
+            detail: "Use normal Kilo permissions without custom security checks",
+            mode: "vanilla",
+          },
+          {
+            label: "Secure",
+            detail: "Use Kilo permissions plus prompt-injection and slopsquatting checks",
+            mode: "secure",
+          },
+          {
+            label: "Dos LLMs + Secure",
+            detail: "Use two-stage LLM review (256 / 4096 tokens) plus security checks",
+            mode: "dos_llms_secure",
+          },
+          { label: "Ask", detail: "Ask at each permission boundary, with security checks", mode: "ask" },
         ] satisfies Array<{ label: string; detail: string; mode: PermissionMode }>,
         { placeHolder: "Select Kilo permission mode" },
       )
@@ -163,6 +185,7 @@ export function registerToggleAutoApprove(
 
   return {
     active: () => mode === "auto",
+    mode: () => mode,
     approve,
     toggle,
     apply,
@@ -180,6 +203,12 @@ export function registerToggleAutoApprove(
   }
 }
 
+function sensitive(metadata: Record<string, unknown> | undefined) {
+  return ["sandboxEscalation", "securityReview", "configProtected", "judgeFallback", "securityDeny", "skillShell"].some(
+    (key) => metadata?.[key] === true,
+  )
+}
+
 function readActive(): boolean {
   return vscode.workspace.getConfiguration(CONFIG).get(KEY, false)
 }
@@ -195,9 +224,14 @@ function configuredMode(): unknown {
   return info?.workspaceFolderValue ?? info?.workspaceValue ?? info?.globalValue
 }
 
-function currentMode(rules: ReadonlyArray<{ permission: string; pattern: string; action: string }> | undefined): PermissionMode | undefined {
+function currentMode(
+  rules: ReadonlyArray<{ permission: string; pattern: string; action: string }> | undefined,
+): PermissionMode | undefined {
   const value = rules?.findLast(
-    (item) => item.permission === "kilo_permission_mode" && item.action === "allow" && permissionModes.includes(item.pattern as PermissionMode),
+    (item) =>
+      item.permission === "kilo_permission_mode" &&
+      item.action === "allow" &&
+      permissionModes.includes(item.pattern as PermissionMode),
   )?.pattern
   return permissionModes.includes(value as PermissionMode) ? (value as PermissionMode) : undefined
 }

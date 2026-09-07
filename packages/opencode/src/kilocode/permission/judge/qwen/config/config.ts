@@ -4,6 +4,7 @@ export enum ApprovalMode {
   AUTO = "auto",
 }
 export interface Settings {
+  scopeReview?: boolean
   classifyAllShell?: boolean
   hints?: { allow?: string[]; deny?: string[]; softDeny?: string[]; hardDeny?: string[] }
   environment?: string[]

@@ -36,6 +36,8 @@ import { Instance } from "@/kilocode/instance" // kilocode_change
 import { SessionID } from "./schema" // kilocode_change
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as PermissionMode from "@/kilocode/permission/mode" // kilocode_change
+import { authority as judgeAuthority } from "@/kilocode/permission/judge/context" // kilocode_change
+import * as JudgeScope from "@/kilocode/permission/judge/scope" // kilocode_change
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -89,9 +91,21 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(sessions.get(SessionID.make(id))).then((session) => session),
     ),
   )
+  const judgeMode = securityMode === "dos_llms_secure" ? securityMode : judging
+  const authority =
+    judgeMode && JudgeScope.enabled(judgeMode)
+      ? yield* Effect.promise(() =>
+          judgeAuthority({
+            session: input.session,
+            parent: (id) => run.promise(sessions.get(SessionID.make(id))),
+            messages: (id) => run.promise(sessions.messages({ sessionID: SessionID.make(id) })),
+          }),
+        )
+      : undefined
   const finish = () =>
     Judge.wrap(tools, {
-      mode: judging,
+      mode: judgeMode,
+      authority,
       id: input.session.id,
       directory: Instance.directory,
       model: input.model,

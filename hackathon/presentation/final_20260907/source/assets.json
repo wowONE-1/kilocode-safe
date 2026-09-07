@@ -1,0 +1,53 @@
+{
+  "assets": [
+    {
+      "slide": 2,
+      "index": 0,
+      "file": "user-slide2-0.jpg",
+      "size": [
+        640,
+        640
+      ],
+      "crop": {
+        "b": "23171",
+        "l": "18088",
+        "r": "16685",
+        "t": "16219"
+      },
+      "sha256": "7b5ae9390ea2f6baeb1ad1e5523bb5965d9f056db61caec54bddeacbbe80b56e"
+    },
+    {
+      "slide": 2,
+      "index": 1,
+      "file": "user-slide2-1.jpg",
+      "size": [
+        1024,
+        1024
+      ],
+      "crop": {},
+      "sha256": "e78aa342a5b8dbc21f8d21bf9e2f489ddd00c9c055ab258e42f90558a587ad78"
+    },
+    {
+      "slide": 2,
+      "index": 2,
+      "file": "user-slide2-2.jpg",
+      "size": [
+        1160,
+        1355
+      ],
+      "crop": {
+        "b": "9518",
+        "l": "0",
+        "r": "0",
+        "t": "2916"
+      },
+      "sha256": "e3dc13b145272e2bd1dca8348fd0fbf1fe921c1724a953d549aecf49694664fb"
+    }
+  ],
+  "template": {
+    "file": "template.pptx",
+    "sha256": "cb9bb222704b72f36b9dceec49694222d18cde81f8f3e7c3868fdf31840a6ea2",
+    "original_sha256": "3a583e2cdccda698ac94ddaeb33f089ab7936bbb11ac90b425e0a3b7dd6ac1e3",
+    "source_path_descriptions_removed": 33
+  }
+}

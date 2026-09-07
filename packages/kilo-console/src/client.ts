@@ -1,4 +1,5 @@
 import { createKiloClient, type Config as EffectiveConfig } from "@kilocode/sdk/v2/client"
+import { permission, type PermissionMode } from "./shared/permission"
 import type {
   AgentBuilderPreviewResponse,
   AgentBuilderSaveResponse,
@@ -616,10 +617,38 @@ export async function loadProjectDiffFile(input: Query, dir: string, file: strin
   return demand("Worktree diff file", result)
 }
 
-export async function createProjectPty(input: Query, dir: string, title = "Kilo session"): Promise<ProjectPtyInfo> {
+export async function setProjectPermission(input: ProjectQuery, id: string, mode: PermissionMode) {
+  const result = await client(input).session.update({
+    directory: input.dir,
+    sessionID: id,
+    permission: permission(mode),
+  })
+  return demand("Session permission mode", result)
+}
+
+export async function createProjectPty(
+  input: Query,
+  dir: string,
+  title = "Kilo session",
+  mode?: PermissionMode,
+): Promise<ProjectPtyInfo> {
   const sdk = client({ url: input.url, dir })
-  const result = await sdk.pty.create({ directory: dir, command: "kilo", cwd: dir, title })
-  return demand("Create terminal", result)
+  const session = mode
+    ? demand("Create session", await sdk.session.create({ directory: dir, permission: permission(mode) }))
+    : undefined
+  try {
+    const result = await sdk.pty.create({
+      directory: dir,
+      command: "kilo",
+      cwd: dir,
+      title,
+      args: session ? [dir, "--session", session.id] : undefined,
+    })
+    return demand("Create terminal", result)
+  } catch (err) {
+    if (session) demand("Remove unused session", await sdk.session.delete({ directory: dir, sessionID: session.id }))
+    throw err
+  }
 }
 
 export async function removeProjectPty(input: Query, pty: string) {

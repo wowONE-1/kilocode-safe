@@ -267,6 +267,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [browsers, setBrowsers] = createSignal<BrowserReference[]>([])
   const [enhancing, setEnhancing] = createSignal(false)
   const [autoApprove, setAutoApprove] = createSignal(false)
+  const [permission, setPermission] = createSignal("secure")
   const [sandboxes, setSandboxes] = createSignal<Record<string, SandboxState>>({})
   const [sandboxDefault, setSandboxDefault] = createSignal<SandboxDefaultState>()
   const [sandboxRequests, setSandboxRequests] = createSignal<Record<string, string>>({})
@@ -678,6 +679,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const unsubAutoApprove = vscode.onMessage((message) => {
     if (message.type === "autoApproveState") {
       setAutoApprove(message.active)
+      setPermission(message.mode)
     }
   })
 
@@ -1669,24 +1671,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </Tooltip>
           </Show>
           <Tooltip
-            value={
-              autoApprove()
-                ? language.t("prompt.action.autoApprove.enabled")
-                : language.t("prompt.action.autoApprove.disabled")
-            }
+            value={language.t("prompt.action.permissionMode", { mode: permission() })}
             placement="top"
             openDelay={0}
           >
             <Button
               variant="ghost"
               size="small"
-              onClick={() => vscode.postMessage({ type: "toggleAutoApprove" })}
-              aria-label={
-                autoApprove()
-                  ? language.t("prompt.action.autoApprove.disable")
-                  : language.t("prompt.action.autoApprove.enable")
-              }
-              aria-pressed={autoApprove()}
+              onClick={() => vscode.postMessage({ type: "selectPermissionMode" })}
+              aria-label={language.t("prompt.action.permissionMode", { mode: permission() })}
               class={`prompt-status-button ${autoApprove() ? "prompt-status-button--active" : ""}`}
             >
               <Icon name="shield" size="small" />

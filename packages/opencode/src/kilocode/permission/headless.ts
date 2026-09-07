@@ -19,6 +19,10 @@ export namespace KiloHeadless {
     roots.add(id)
   }
 
+  export function marked(id: string) {
+    return roots.has(id)
+  }
+
   export function clear(id: string) {
     roots.delete(id)
   }

@@ -1,0 +1,44 @@
+{
+  "resources": [
+    {
+      "path": "assets/permission-modes.png",
+      "sha256": "ecbc4e4dba552998b9fbd01699dcf1cf90f80e4a1a6374194586b7c91c7e35dd",
+      "bytes": 26601
+    },
+    {
+      "path": "assets/template.pptx",
+      "sha256": "cb9bb222704b72f36b9dceec49694222d18cde81f8f3e7c3868fdf31840a6ea2",
+      "bytes": 4161052,
+      "original_sha256": "3a583e2cdccda698ac94ddaeb33f089ab7936bbb11ac90b425e0a3b7dd6ac1e3",
+      "source_path_descriptions_removed": 33,
+      "visual_content_unchanged": true
+    },
+    {
+      "path": "assets/user-slide2-0.jpg",
+      "sha256": "7b5ae9390ea2f6baeb1ad1e5523bb5965d9f056db61caec54bddeacbbe80b56e",
+      "bytes": 63652
+    },
+    {
+      "path": "assets/user-slide2-1.jpg",
+      "sha256": "e78aa342a5b8dbc21f8d21bf9e2f489ddd00c9c055ab258e42f90558a587ad78",
+      "bytes": 51490
+    },
+    {
+      "path": "assets/user-slide2-2.jpg",
+      "sha256": "e3dc13b145272e2bd1dca8348fd0fbf1fe921c1724a953d549aecf49694664fb",
+      "bytes": 79510
+    },
+    {
+      "path": "fonts/Inter-variable.ttf",
+      "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+      "bytes": 876576
+    },
+    {
+      "path": "fonts/OFL.txt",
+      "sha256": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57",
+      "bytes": 4377
+    }
+  ],
+  "font_license_source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt",
+  "verified_date": "2026-09-07"
+}

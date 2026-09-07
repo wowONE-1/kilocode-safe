@@ -255,13 +255,14 @@ export const RunCommand = effectCmd({
       // kilocode_change start
       .option("mode", {
         type: "string",
-        choices: ["mode_dos_llm_as_a_judge", "mode_prompt_guard_with_llm"] as const,
+        choices: ["mode_dos_llm_as_a_judge", "mode_prompt_guard_with_llm", "dos_llms_secure"] as const,
         describe: "Qwen AUTO permission classifier mode",
       })
       .option("permission-mode", {
         type: "string",
-        choices: ["auto", "vanilla", "secure", "ask"] as const,
-        describe: "permission policy: auto, vanilla, secure checks, or ask every action",
+        choices: ["auto", "vanilla", "secure", "ask", "dos_llms_secure"] as const,
+        describe:
+          "permission policy: auto, vanilla, secure checks, ask every action, or two LLM judges with secure checks",
       })
       // kilocode_change end
       .option("auto", {
@@ -308,12 +309,20 @@ export const RunCommand = effectCmd({
     yield* Effect.promise(async () => {
       // kilocode_change start - remote servers need their own mode registration protocol
       if (
-        args.mode &&
+        (args.mode || args["permission-mode"] === "dos_llms_secure") &&
         (args.attach || args.auto || args.yolo || args["dangerously-skip-permissions"] || args.mini || args.interactive)
       ) {
         throw new Error(
           "--mode requires a local headless run and cannot be combined with --auto, --yolo, --attach, or interactive flags",
         )
+      }
+      if (
+        (args.mode === "dos_llms_secure" &&
+          args["permission-mode"] &&
+          !["secure", "dos_llms_secure"].includes(args["permission-mode"])) ||
+        (args["permission-mode"] === "dos_llms_secure" && args.mode && args.mode !== "dos_llms_secure")
+      ) {
+        throw new Error("dos_llms_secure cannot be combined with another judge or a weaker permission policy")
       }
       // kilocode_change end
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
@@ -793,7 +802,7 @@ export const RunCommand = effectCmd({
         }
         const sessionID = sess.id
         // kilocode_change start - persist the selected permission policy on this session before tools resolve
-        const permissionMode = args["permission-mode"]
+        const permissionMode = args.mode === "dos_llms_secure" ? "dos_llms_secure" : args["permission-mode"]
         if (PermissionMode.valid(permissionMode)) {
           await sdk.session.update({
             sessionID,
@@ -956,7 +965,9 @@ export const RunCommand = effectCmd({
               if (!KiloRunAuto.allowed(tracked, permission.sessionID)) continue // kilocode_change
               // kilocode_change start - skill shell batches need an interactive human decision. The server ignores
               // non-interactive approvals, so headless runs must reject explicitly rather than leave them pending.
-              if (permission.metadata?.["skillShell"] === true || permission.metadata?.["sandboxEscalation"] === true) {
+              if (["skillShell", "sandboxEscalation", "securityReview", "configProtected", "judgeFallback", "securityDeny"].some(
+                (key) => permission.metadata?.[key] === true,
+              )) {
                 await client.permission.reply({ requestID: permission.id, reply: "reject" })
                 continue
               }
@@ -1192,7 +1203,14 @@ export const RunCommand = effectCmd({
         return await execute(sdk)
       }
 
-      if (!args.mode && (await KiloRunDaemon.attach({ directory, execute }))) return // kilocode_change - judge state belongs to the local runtime
+      // kilocode_change start - keep judge runs on the current local runtime
+      if (
+        !args.mode &&
+        args["permission-mode"] !== "dos_llms_secure" &&
+        (await KiloRunDaemon.attach({ directory, execute }))
+      )
+        return
+      // kilocode_change end
 
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const { Server } = await import("@/server/server")

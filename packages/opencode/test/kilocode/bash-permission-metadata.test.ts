@@ -1,6 +1,6 @@
 // regression test for bash permission metadata.command
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { Effect, Exit, Layer, ManagedRuntime } from "effect"
 import { ShellTool } from "../../src/tool/shell"
 import { provideTestInstance } from "../fixture/fixture"
@@ -61,45 +61,119 @@ const review = (requests: Array<Omit<Permission.Request, "id" | "sessionID" | "t
 })
 
 describe("bash permission metadata.command", () => {
-  test("asks for security review before executing an unverified package source", async () => {
+  test.each(["secure", "dos_llms_secure"])(
+    "%s asks for security review before executing an unverified package source",
+    async (mode) => {
+      await using tmp = await tmpdir()
+      await provideTestInstance({
+        directory: tmp.path,
+        fn: async () => {
+          const bash = await runtime.runPromise(ShellTool.pipe(Effect.flatMap((info) => info.init())))
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          const exit = await Effect.runPromiseExit(
+            bash.execute({ command: "bun add file:./reactt" }, { ...review(requests), extra: { securityMode: mode } }),
+          )
+
+          expect(Exit.isFailure(exit)).toBe(true)
+          expect(requests).toHaveLength(1)
+          expect(requests[0]).toMatchObject({
+            permission: "security_package",
+            patterns: ["bun add file:./reactt"],
+            always: [],
+            metadata: {
+              command: "bun add file:./reactt",
+              packages: ["file:./reactt"],
+              securityReview: true,
+            },
+          })
+        },
+      })
+    },
+  )
+
+  test("an accepted package review retains the ordinary permission boundary", async () => {
     await using tmp = await tmpdir()
     await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const bash = await runtime.runPromise(ShellTool.pipe(Effect.flatMap((info) => info.init())))
         const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const exit = await Effect.runPromiseExit(bash.execute({ command: "bun add file:./reactt" }, review(requests)))
-
+        const exit = await Effect.runPromiseExit(
+          bash.execute(
+            { command: "bun add file:./package" },
+            {
+              ...baseCtx,
+              ask: (request) =>
+                Effect.sync(() => {
+                  requests.push(request)
+                  if (request.permission === "bash") throw new Error("ordinary permission denied")
+                }),
+            },
+          ),
+        )
         expect(Exit.isFailure(exit)).toBe(true)
-        expect(requests).toHaveLength(1)
-        expect(requests[0]).toMatchObject({
-          permission: "security_package",
-          patterns: ["bun add file:./reactt"],
-          always: [],
-          metadata: {
-            command: "bun add file:./reactt",
-            packages: ["file:./reactt"],
-            securityReview: true,
-          },
-        })
+        expect(requests.map((request) => request.permission)).toEqual(["security_package", "bash"])
+        expect(await Bun.file(tmp.path + "/package.json").exists()).toBe(false)
       },
     })
   })
 
-  test("uses the package review as the only prompt for a direct install", async () => {
-    await using tmp = await tmpdir()
-    await provideTestInstance({
-      directory: tmp.path,
-      fn: async () => {
-        const bash = await runtime.runPromise(ShellTool.pipe(Effect.flatMap((info) => info.init())))
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        await Effect.runPromise(bash.execute({ command: "bun add file:./package" }, capture(requests)))
-
-        expect(requests).toHaveLength(1)
-        expect(requests[0]).toMatchObject({ permission: "security_package" })
-      },
-    })
-  })
+  test.each(["secure", "dos_llms_secure"])(
+    "%s keeps a metadata-approved install behind the ordinary permission boundary",
+    async (mode) => {
+      await using tmp = await tmpdir()
+      await provideTestInstance({
+        directory: tmp.path,
+        fn: async () => {
+          const bash = await runtime.runPromise(ShellTool.pipe(Effect.flatMap((info) => info.init())))
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          const fetch = spyOn(globalThis, "fetch").mockImplementation(
+            Object.assign(
+              async () =>
+                new Response(
+                  JSON.stringify({
+                    "dist-tags": { latest: "1.0.0" },
+                    time: {
+                      created: "2020-01-01T00:00:00Z",
+                      "0.9.0": "2024-01-01T00:00:00Z",
+                      "1.0.0": "2025-01-01T00:00:00Z",
+                    },
+                    versions: {
+                      "0.9.0": { dist: { integrity: "sha512-old" } },
+                      "1.0.0": { dist: { integrity: "sha512-current" } },
+                    },
+                  }),
+                ),
+              { preconnect: globalThis.fetch.preconnect },
+            ),
+          )
+          try {
+            const exit = await Effect.runPromiseExit(
+              bash.execute(
+                { command: "npm install react@1.0.0" },
+                {
+                  ...baseCtx,
+                  extra: { securityMode: mode },
+                  ask: (request) =>
+                    Effect.sync(() => {
+                      requests.push(request)
+                      throw new Error("ordinary permission denied")
+                    }),
+                },
+              ),
+            )
+            expect(Exit.isFailure(exit)).toBe(true)
+            expect(requests.map((request) => request.permission)).toEqual(["bash"])
+            expect(requests[0].patterns).toContain("npm install react@1.0.0")
+            expect(await Bun.file(tmp.path + "/package.json").exists()).toBe(false)
+            expect(fetch).toHaveBeenCalledTimes(1)
+          } finally {
+            fetch.mockRestore()
+          }
+        },
+      })
+    },
+  )
 
   test("permission prompt shows raw command without tool name prefix", async () => {
     await using tmp = await tmpdir()
