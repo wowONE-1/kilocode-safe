@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "generated_utc": "2026-09-07T06:47:23.534890+00:00",
+  "generated_utc": "2026-09-07T06:53:38.825813+00:00",
   "runtime_commit": "b184d6358b4078e6087694097141b7d7e976a27e",
   "config_sha256": "b4aa70057d93542d030d3afbdc9185bbccb661129c92e3b202bd40db5ff4a74b",
-  "fingerprint": "aaee479ffaa579edfa06ba5d5c20bcb2d672d0bb7f2486be96b7384a338084f3",
+  "fingerprint": "985397cdcee689d04e24ba00b24ff4fcd8c37c095901a4fd9434a5f51b414f1e",
   "file_count": 65,
   "files": [
     {
@@ -268,9 +268,9 @@
     {
       "source": "presentation/final_20260907/source/build_deck.mjs",
       "destination": "presentation/final_20260907/source/build_deck.mjs",
-      "bytes": 34664,
-      "source_sha256": "ce0dcc6bf7dbbf12128715c210395629ca8ebb34c620a334684c03b7550e5da7",
-      "sha256": "ce0dcc6bf7dbbf12128715c210395629ca8ebb34c620a334684c03b7550e5da7"
+      "bytes": 34590,
+      "source_sha256": "962f52b79647e636afd66bc68f5e5761b4d104f45c296b4d74284e39e1a7c85f",
+      "sha256": "962f52b79647e636afd66bc68f5e5761b4d104f45c296b4d74284e39e1a7c85f"
     },
     {
       "source": "presentation/final_20260907/source/build_demo.py",
@@ -436,16 +436,16 @@
     {
       "source": "output/final/team3_project.pptx",
       "destination": "output/final/team3_project.pptx",
-      "bytes": 2006081,
-      "source_sha256": "4c030f52fb01f14dd8341075858da45c3e53bdbbc138065fb94841a7fdd33c20",
-      "sha256": "4c030f52fb01f14dd8341075858da45c3e53bdbbc138065fb94841a7fdd33c20"
+      "bytes": 2006026,
+      "source_sha256": "cf7395dd2af7ffbfbb4874ba72a5c25d6238bbe7e3995fa8118fe2c4fadf84a4",
+      "sha256": "cf7395dd2af7ffbfbb4874ba72a5c25d6238bbe7e3995fa8118fe2c4fadf84a4"
     },
     {
       "source": "output/final/team3_project.pdf",
       "destination": "output/final/team3_project.pdf",
-      "bytes": 502753,
-      "source_sha256": "8773aa9f31f63168c5ccd3e3059d40fb12d70caa5ec827caef68b62d49f9de95",
-      "sha256": "8773aa9f31f63168c5ccd3e3059d40fb12d70caa5ec827caef68b62d49f9de95"
+      "bytes": 501979,
+      "source_sha256": "37580bb935c408962fd4face835b86a6b6fa308915da141be4eb11580321a2dc",
+      "sha256": "37580bb935c408962fd4face835b86a6b6fa308915da141be4eb11580321a2dc"
     },
     {
       "source": "presentation/final_20260907/assets/approval-approaches.png",
